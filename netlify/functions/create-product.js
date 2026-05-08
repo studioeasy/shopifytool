@@ -9,7 +9,8 @@ exports.handler = async function(event, context) {
     if (!event.body) return { statusCode: 400, headers, body: JSON.stringify({ error: 'No body' }) };
 
     const { shopifyToken, googleToken, title, bodyHtml, vendor, price, ek, sku, barcode,
-            farbe, marke, produkt, filterKategorie, detailsText, groesseText, seoTitle, seoMeta } = JSON.parse(event.body);
+            farbe, marke, produkt, filterKategorie, detailsText, groesseText,
+            seoTitle, seoMeta, seoTextEn, metaDescEn, groessen } = JSON.parse(event.body);
 
     const STORE = 'pevzde-fd.myshopify.com';
     const GRAPHQL_URL = 'https://' + STORE + '/admin/api/2026-01/graphql.json';
@@ -27,15 +28,12 @@ exports.handler = async function(event, context) {
       if (!c) return 'BLACK';
       const cl = c.toLowerCase();
       const map = {
-        'schwarz': 'BLACK', 'black': 'BLACK',
-        'weiss': 'WHITE', 'white': 'WHITE',
-        'grau': 'GRAY', 'gray': 'GRAY', 'grey': 'GRAY', 'dunkelgrau': 'DARK GRAY', 'hellgrau': 'LIGHT GRAY',
+        'schwarz': 'BLACK', 'black': 'BLACK', 'weiss': 'WHITE', 'white': 'WHITE',
+        'grau': 'GRAY', 'gray': 'GRAY', 'grey': 'GRAY', 'dunkelgrau': 'DARK GRAY',
         'beige': 'BEIGE', 'sand gold': 'DARK KHAKI', 'sand': 'BISQUE',
-        'braun': 'BROWN', 'brown': 'BROWN', 'dark brown': 'SADDLE BROWN', 'walnut': 'SADDLE BROWN',
-        'cognac': 'SIENNA', 'camel': 'TAN', 'nougat': 'BURLY WOOD',
-        'rot': 'RED', 'red': 'RED', 'dunkelrot': 'DARK RED',
-        'pink': 'PINK', 'rosa': 'LIGHT PINK', 'altrosa': 'PALE VIOLET RED',
-        'orange': 'ORANGE', 'coral': 'CORAL',
+        'braun': 'BROWN', 'brown': 'BROWN', 'dark brown': 'SADDLE BROWN',
+        'cognac': 'SIENNA', 'camel': 'TAN', 'rot': 'RED', 'red': 'RED',
+        'pink': 'PINK', 'rosa': 'LIGHT PINK', 'orange': 'ORANGE', 'coral': 'CORAL',
         'gelb': 'YELLOW', 'yellow': 'YELLOW', 'gold': 'GOLD',
         'grün': 'GREEN', 'green': 'GREEN', 'olive': 'OLIVE', 'khaki': 'KHAKI',
         'blau': 'BLUE', 'blue': 'BLUE', 'navy': 'NAVY', 'dunkelblau': 'DARK BLUE',
@@ -43,7 +41,7 @@ exports.handler = async function(event, context) {
         'lila': 'PURPLE', 'purple': 'PURPLE', 'violet': 'VIOLET', 'lavender': 'LAVENDER',
         'mint': 'MINT CREAM', 'türkis': 'TURQUOISE', 'teal': 'TEAL',
         'multi': 'MULTICOLOR', 'mehrfarbig': 'MULTICOLOR',
-        'natur': 'LINEN', 'natural': 'LINEN', 'ecru': 'IVORY', 'creme': 'IVORY', 'cream': 'IVORY',
+        'natur': 'LINEN', 'natural': 'LINEN', 'ecru': 'IVORY', 'creme': 'IVORY',
         'silber': 'SILVER', 'silver': 'SILVER',
         'faded butter': 'LIGHT YELLOW', 'butter': 'LIGHT YELLOW',
         'stone': 'DARK KHAKI', 'slate': 'SLATE GRAY'
@@ -64,7 +62,6 @@ exports.handler = async function(event, context) {
     async function findPhotos() {
       if (!googleToken) return [];
       try {
-        // Find root folder "Fotos Brands"
         const rootSearch = await fetch(
           `https://www.googleapis.com/drive/v3/files?q=name+%3D+'Fotos+Brands'+and+mimeType+%3D+'application%2Fvnd.google-apps.folder'&fields=files(id,name)`,
           { headers: { 'Authorization': 'Bearer ' + googleToken } }
@@ -72,7 +69,6 @@ exports.handler = async function(event, context) {
         const rootFolder = rootSearch.files?.[0];
         if (!rootFolder) { console.log('Root folder not found'); return []; }
 
-        // Find brand folder inside root
         const brandSearch = await fetch(
           `https://www.googleapis.com/drive/v3/files?q='${rootFolder.id}'+in+parents+and+name+%3D+'${encodeURIComponent(marke)}'+and+mimeType+%3D+'application%2Fvnd.google-apps.folder'&fields=files(id,name)`,
           { headers: { 'Authorization': 'Bearer ' + googleToken } }
@@ -80,47 +76,27 @@ exports.handler = async function(event, context) {
         const brandFolder = brandSearch.files?.[0];
         if (!brandFolder) { console.log('Brand folder not found:', marke); return []; }
 
-        // Find ALL folders with product name anywhere under brand folder
         const productSearch = await fetch(
           `https://www.googleapis.com/drive/v3/files?q=name+%3D+'${encodeURIComponent(produkt)}'+and+mimeType+%3D+'application%2Fvnd.google-apps.folder'&fields=files(id,name)`,
           { headers: { 'Authorization': 'Bearer ' + googleToken } }
         ).then(r => r.json());
         const productFolders = productSearch.files || [];
-        console.log('Product folders found:', productFolders.length);
+        if (productFolders.length === 0) { console.log('No product folder:', produkt); return []; }
 
-        if (productFolders.length === 0) { console.log('No product folder found:', produkt); return []; }
-
-        // Normalize color for matching (lowercase, spaces to hyphens)
         const colorNorm = farbe.toLowerCase().replace(/\s+/g, '-');
-
-        // For each folder, check if it contains photos matching the color
         for (const folder of productFolders) {
           const filesSearch = await fetch(
             `https://www.googleapis.com/drive/v3/files?q='${folder.id}'+in+parents+and+mimeType+contains+'image/'&fields=files(id,name,mimeType)&orderBy=name`,
             { headers: { 'Authorization': 'Bearer ' + googleToken } }
           ).then(r => r.json());
           const allFiles = filesSearch.files || [];
-          console.log('Files in folder', folder.name, ':', allFiles.map(f => f.name));
-
-          // Check if any file contains the color name
           const colorFiles = allFiles.filter(f =>
             f.name.toLowerCase().includes(colorNorm) ||
             f.name.toLowerCase().includes(farbe.toLowerCase())
           );
-
-          if (colorFiles.length > 0) {
-            console.log('Found matching photos:', colorFiles.map(f => f.name));
-            return colorFiles;
-          }
-
-          // If only one folder exists, use all files regardless of color match
-          if (productFolders.length === 1 && allFiles.length > 0) {
-            console.log('Single folder, using all photos');
-            return allFiles;
-          }
+          if (colorFiles.length > 0) return colorFiles;
+          if (productFolders.length === 1 && allFiles.length > 0) return allFiles;
         }
-
-        console.log('No photos with matching color found for:', farbe);
         return [];
       } catch(e) {
         console.log('Drive error:', e.message);
@@ -128,7 +104,6 @@ exports.handler = async function(event, context) {
       }
     }
 
-    // Download and convert to base64
     async function downloadAsBase64(fileId) {
       const resp = await fetch(
         `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
@@ -143,48 +118,53 @@ exports.handler = async function(event, context) {
 
     // --- FIND INTRO BRAND ---
     let introBrandId = null;
-    const brandSearch2 = await gql(`
-      query { metaobjects(type: "intro_brand", first: 50) { nodes { id displayName } } }`, {});
-    const allBrands = brandSearch2?.data?.metaobjects?.nodes || [];
+    const brandResult = await gql(`query { metaobjects(type: "intro_brand", first: 50) { nodes { id displayName } } }`, {});
+    const allBrands = brandResult?.data?.metaobjects?.nodes || [];
     const exactMatch = allBrands.find(b => b.displayName.toLowerCase() === marke.toLowerCase());
-    const partialMatch = allBrands.find(b =>
-      b.displayName.toLowerCase().includes(marke.toLowerCase()) ||
-      marke.toLowerCase().includes(b.displayName.toLowerCase())
-    );
+    const partialMatch = allBrands.find(b => b.displayName.toLowerCase().includes(marke.toLowerCase()) || marke.toLowerCase().includes(b.displayName.toLowerCase()));
     introBrandId = exactMatch?.id || partialMatch?.id || null;
-    console.log('Brand match:', exactMatch?.displayName || partialMatch?.displayName || 'none');
+    console.log('Brand:', exactMatch?.displayName || partialMatch?.displayName || 'none');
 
     // --- CREATE METAOBJECTS ---
-    // --- CREATE METAOBJECTS (active) ---
-    const detailsHandle = makeHandle(title + '-details');
     const detailsResult = await gql(`
       mutation CreateMetaobject($metaobject: MetaobjectCreateInput!) {
-        metaobjectCreate(metaobject: $metaobject) {
-          metaobject { id }
-          userErrors { field message }
-        }
-      }`, { metaobject: { type: 'details_pflege', handle: detailsHandle, capabilities: { publishable: { status: 'ACTIVE' } }, fields: [{ key: 'details_pflege', value: detailsText }] } });
+        metaobjectCreate(metaobject: $metaobject) { metaobject { id } userErrors { field message } }
+      }`, { metaobject: { type: 'details_pflege', handle: makeHandle(title + '-details'), capabilities: { publishable: { status: 'ACTIVE' } }, fields: [{ key: 'details_pflege', value: detailsText }] } });
     const detailsId = detailsResult?.data?.metaobjectCreate?.metaobject?.id;
-    console.log('Details ID:', detailsId, 'errors:', JSON.stringify(detailsResult?.data?.metaobjectCreate?.userErrors));
 
-    const groesseHandle = makeHandle(title + '-groesse');
     const groesseResult = await gql(`
       mutation CreateMetaobject($metaobject: MetaobjectCreateInput!) {
-        metaobjectCreate(metaobject: $metaobject) {
-          metaobject { id }
-          userErrors { field message }
-        }
-      }`, { metaobject: { type: 'grosse_passform', handle: groesseHandle, capabilities: { publishable: { status: 'ACTIVE' } }, fields: [{ key: 'grosse_passform', value: groesseText }] } });
+        metaobjectCreate(metaobject: $metaobject) { metaobject { id } userErrors { field message } }
+      }`, { metaobject: { type: 'grosse_passform', handle: makeHandle(title + '-groesse'), capabilities: { publishable: { status: 'ACTIVE' } }, fields: [{ key: 'grosse_passform', value: groesseText }] } });
     const groesseId = groesseResult?.data?.metaobjectCreate?.metaobject?.id;
-    console.log('Groesse ID:', groesseId, 'errors:', JSON.stringify(groesseResult?.data?.metaobjectCreate?.userErrors));
 
     // --- FIND PHOTOS ---
     const photos = await findPhotos();
 
-    // --- CREATE PRODUCT ---
+    // --- BUILD VARIANTS ---
     const finalBarcode = (!barcode || barcode.trim() === '') ? 'kundenspezifisch' : barcode;
-    const variantData = { price, taxable: true, barcode: finalBarcode, weight: 0.5, weight_unit: 'kg' };
-    if (sku) variantData.sku = sku;
+    let variants = [];
+
+    // Check if we have size variants
+    const sizeKeys = ['XS','S','M','L','XL','34','36','38','40','42','44','25','26','27','28','29','30','37','39','41','OS'];
+    const activeGroessen = groessen ? Object.entries(groessen).filter(([k,v]) => v !== '' && v !== null && v !== undefined && sizeKeys.includes(k)) : [];
+
+    if (activeGroessen.length > 0) {
+      variants = activeGroessen.map(([size, qty]) => ({
+        option1: size,
+        price,
+        taxable: true,
+        barcode: finalBarcode,
+        weight: 0.5,
+        weight_unit: 'kg',
+        inventory_management: 'shopify',
+        inventory_quantity: parseInt(qty) || 0
+      }));
+      if (sku) variants.forEach((v, i) => { v.sku = sku + (variants.length > 1 ? '-' + v.option1 : ''); });
+    } else {
+      variants = [{ price, taxable: true, barcode: finalBarcode, weight: 0.5, weight_unit: 'kg', inventory_management: 'shopify' }];
+      if (sku) variants[0].sku = sku;
+    }
 
     const metafields = [
       { namespace: 'custom', key: 'color', value: mapColor(farbe), type: 'single_line_text_field' },
@@ -192,16 +172,21 @@ exports.handler = async function(event, context) {
     ];
     if (filterKategorie) metafields.push({ namespace: 'custom', key: 'filter_kategorie', value: filterKategorie, type: 'single_line_text_field' });
 
+    const productPayload = {
+      title, body_html: bodyHtml, vendor, status: 'draft', published_scope: 'global',
+      variants,
+      metafields
+    };
+    if (activeGroessen.length > 0) productPayload.options = [{ name: 'Grösse', values: activeGroessen.map(([k]) => k) }];
+
+    // --- CREATE PRODUCT ---
     const productResp = await fetch('https://' + STORE + '/admin/api/2026-01/products.json', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
-      body: JSON.stringify({ product: { title, body_html: bodyHtml, vendor, status: 'draft', published_scope: 'global', variants: [variantData], metafields } })
+      body: JSON.stringify({ product: productPayload })
     });
     const productData = await productResp.json();
-
-    if (!productData.product?.id) {
-      return { statusCode: 500, headers, body: JSON.stringify({ error: 'Product failed', details: productData }) };
-    }
+    if (!productData.product?.id) return { statusCode: 500, headers, body: JSON.stringify({ error: 'Product failed', details: productData }) };
 
     const pid = productData.product.id;
     const productGid = 'gid://shopify/Product/' + pid;
@@ -213,24 +198,40 @@ exports.handler = async function(event, context) {
     if (introBrandId) mfInputs.push({ namespace: 'custom', key: 'intro_brand', value: introBrandId, type: 'metaobject_reference' });
     mfInputs.push({ namespace: 'custom', key: 'lieferung_retoure', value: LIEFERUNG_GID, type: 'metaobject_reference' });
 
-    const linkResult = await gql(`
+    await gql(`
       mutation UpdateProduct($input: ProductInput!) {
-        productUpdate(input: $input) {
-          product { id }
-          userErrors { field message }
-        }
+        productUpdate(input: $input) { product { id } userErrors { field message } }
       }`, { input: { id: productGid, metafields: mfInputs } });
-    console.log('Link errors:', JSON.stringify(linkResult?.data?.productUpdate?.userErrors));
 
-    // --- ACTIVATE ALL SALES CHANNELS ---
-    const channelsResult = await gql(`
+    // --- ADD TO COLLECTIONS ---
+    const collectionsResult = await gql(`
       query {
-        publications(first: 20) {
-          nodes { id name }
+        collections(first: 100) {
+          nodes { id title }
         }
       }`, {});
+    const allCollections = collectionsResult?.data?.collections?.nodes || [];
+    console.log('Collections found:', allCollections.length);
+
+    const targetCollections = allCollections.filter(c =>
+      c.title === 'New Arrivals' ||
+      c.title.toLowerCase() === marke.toLowerCase()
+    );
+
+    for (const collection of targetCollections) {
+      await gql(`
+        mutation AddToCollection($id: ID!, $productIds: [ID!]!) {
+          collectionAddProducts(id: $id, productIds: $productIds) {
+            collection { id }
+            userErrors { field message }
+          }
+        }`, { id: collection.id, productIds: [productGid] });
+      console.log('Added to collection:', collection.title);
+    }
+
+    // --- SALES CHANNELS ---
+    const channelsResult = await gql(`query { publications(first: 20) { nodes { id name } } }`, {});
     const channels = channelsResult?.data?.publications?.nodes || [];
-    console.log('Channels:', channels.map(c => c.name));
     for (const channel of channels) {
       await gql(`
         mutation PublishProduct($id: ID!, $input: [PublicationInput!]!) {
@@ -242,24 +243,19 @@ exports.handler = async function(event, context) {
     }
 
     // --- UPLOAD PHOTOS ---
-    if (photos.length > 0) {
-      for (let i = 0; i < photos.length; i++) {
-        const photo = photos[i];
-        try {
-          const base64 = await downloadAsBase64(photo.id);
-          const ext = photo.name.split('.').pop();
-          const newName = makeHandle(marke + '-' + produkt + '-' + farbe) + '-' + (i + 1) + '.' + ext;
-          const altText = marke + ' ' + produkt + ' ' + farbe + ' – ' + (i + 1 === 1 ? 'Produktbild' : 'Detailbild ' + i);
-          await fetch('https://' + STORE + '/admin/api/2026-01/products/' + pid + '/images.json', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
-            body: JSON.stringify({ image: { attachment: base64, filename: newName, alt: altText } })
-          });
-          console.log('Uploaded photo:', newName);
-        } catch(e) {
-          console.log('Photo upload error:', e.message);
-        }
-      }
+    for (let i = 0; i < photos.length; i++) {
+      try {
+        const base64 = await downloadAsBase64(photos[i].id);
+        const ext = photos[i].name.split('.').pop();
+        const newName = makeHandle(marke + '-' + produkt + '-' + farbe) + '-' + (i + 1) + '.' + ext;
+        const altText = marke + ' ' + produkt + ' ' + farbe + (i === 0 ? ' – Produktbild' : ' – Detailbild ' + i);
+        await fetch('https://' + STORE + '/admin/api/2026-01/products/' + pid + '/images.json', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
+          body: JSON.stringify({ image: { attachment: base64, filename: newName, alt: altText } })
+        });
+        console.log('Uploaded photo:', newName);
+      } catch(e) { console.log('Photo error:', e.message); }
     }
 
     // --- EK AS COST ---
@@ -272,13 +268,31 @@ exports.handler = async function(event, context) {
       });
     }
 
-    // --- SEO ---
+    // --- SEO + TRANSLATIONS ---
     if (seoTitle || seoMeta) {
       await fetch('https://' + STORE + '/admin/api/2026-01/products/' + pid + '.json', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
         body: JSON.stringify({ product: { id: pid, metafields_global_title_tag: seoTitle, metafields_global_description_tag: seoMeta } })
       });
+    }
+
+    // --- ENGLISH TRANSLATIONS ---
+    if (seoTextEn || metaDescEn) {
+      const translations = [];
+      if (seoTextEn) translations.push({ key: 'body_html', value: seoTextEn, locale: 'en', translatableContentDigest: '' });
+      if (metaDescEn) translations.push({ key: 'meta_description', value: metaDescEn, locale: 'en', translatableContentDigest: '' });
+
+      if (translations.length > 0) {
+        const transResult = await gql(`
+          mutation TranslationsRegister($resourceId: ID!, $translations: [TranslationInput!]!) {
+            translationsRegister(resourceId: $resourceId, translations: $translations) {
+              translations { key locale value }
+              userErrors { field message }
+            }
+          }`, { resourceId: productGid, translations });
+        console.log('Translations:', JSON.stringify(transResult?.data?.translationsRegister?.userErrors));
+      }
     }
 
     return { statusCode: 200, headers, body: JSON.stringify({ product: productData.product, photosUploaded: photos.length }) };

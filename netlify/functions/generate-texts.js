@@ -15,58 +15,45 @@ exports.handler = async function(event, context) {
     const prompt = `Du bist SEO-Texter fuer den deutschen Online-Shop Studio Easy (studioeasy.de). Kuratierte Mode, Accessoires und Lifestyle-Produkte.
 
 ZEICHENREGELN:
-- Das einzige Zeichen das ersetzt werden muss: ss statt ß (also Strasse, weiss, Groesse, muss)
-- Alle anderen Umlaute bleiben EXAKT so: ä bleibt ä, ö bleibt ö, ü bleibt ü, Ä Ö Ü ebenfalls
-- NIEMALS ae, oe, ue schreiben – das ist FALSCH!
-- Verwende KEINE Anführungszeichen innerhalb der Textwerte!
-- Ton: Klar, modern, direkt. Du-Ansprache. Kurze, präzise Sätze.
+- Ersetze ß durch ss (Strasse, weiss, Groesse)
+- Umlaute ä, ö, ü BLEIBEN als ä, ö, ü - NIEMALS ae, oe, ue schreiben!
+- Keine Anführungszeichen innerhalb der Textwerte!
+- Ton: Klar, modern, direkt. Du-Ansprache.
 
 Produkt: ${produkt} von ${marke}
 Farbe: ${farbe || 'nicht angegeben'}
 Beschreibung (englisch): ${beschreibung || 'nicht angegeben'}
 
-BEISPIELE fuer Details & Pflege:
+BEISPIELE fuer Details und Pflege:
 
-Beispiel 1 (Tasche):
-Die Raffia Bucket Bag von Zulu & Zephyr – eine handgeflochtene Tasche, die mit einer weichen, zugleich strukturierten Silhouette und einem breiten, festen Trageriemen fuer komfortables Tragen ueberzeugt. Grosszuegig bemessen bietet sie ausreichend Platz fuer alle Essentials.
+Beispiel 1:
+Die Raffia Bucket Bag von Zulu und Zephyr - eine handgeflochtene Tasche mit breitem Trageriemen. Grosszügig bemessen für alle Essentials.
 Details:
-- Weiches, dicht geflochtenes Material
-- Innentasche mit cremefarbenem Logo-Patch
+- 100 % natürliches Raffia, handgeflochten
+- Innentasche mit Logo-Patch
 Pflegehinweis:
-- Mit einem feuchten Tuch reinigen
-- Flach im Schatten trocknen
+- Mit feuchtem Tuch reinigen
+- Flach trocknen
 
-Beispiel 2 (Badeanzug):
-Der Novantatre Badeanzug von Lido steht fuer klare Linien und funktionale Eleganz. Breite, elastische Traeger sorgen fuer sicheren Halt.
+Beispiel 2:
+Der Novantatre Badeanzug von Lido steht für klare Linien und funktionale Eleganz.
 Details:
 - Mittlere Bedeckung (Medium Coverage)
-- Material: Nachhaltiges Lycra mit matter Oberflaeche
+- Nachhaltiges Lycra, matte Oberfläche
 - Hergestellt in Italien
 Pflegehinweis:
-- Maschinenwaesche im Schonwaschgang bei max. 30°C
-- Flach an der Luft trocknen
-
-BEISPIEL fuer SEO-Text:
-
-<h1>[Marke] [Produktname] [Farbe] – [praegnantes Haupt-Keyword]</h1>
-<h2>[Produktname] [Farbe] – [keyword-reicher Untertitel mit Produkttyp und Material]</h2>
-<p>[Erster Absatz: 3-4 Saetze. Produktname + Marke + Farbe + was es ist + Besonderheit. Longtail-Keywords natuerlich eingebaut.]</p>
-<p>[Zweiter Absatz: 3-4 Saetze. Material/Herstellung + Nachhaltigkeitsaspekte + Styling-Situation. Markenname nochmal erwaehnen.]</p>
-<h2>Details</h2>
-<ul><li>Marke: [Marke]</li><li>Modell: [Produktname]</li><li>Farbe: [Farbe]</li><li>[Material]</li><li>[Besonderheit]</li></ul>
-<h2>Grösse & Passform</h2>
-<ul><li>[Masse oder Fit-Infos]</li></ul>
-<h2>Material & Qualitaet</h2>
-<ul><li>[Material]</li><li>[Nachhaltigkeit]</li></ul>
-<h2>Styling & Anlaesse</h2>
-<p>[2-3 Saetze natuerlicher Text mit Outfit-Kombis und Anlaessen. KEINE Keyword-Liste!]</p>
+- Schonwaschgang bei max. 30 Grad
+- Flach trocknen
 
 SEO-REGELN:
-- H1 IMMER: Marke + Produktname + Farbe + Keyword
-- Markenname min. 3x im Text
-- Min. 300 Woerter gesamt
-- SEO-Titel: MAXIMAL 70 Zeichen (zaehle genau!)
-- Meta-Description: MAXIMAL 155 Zeichen (zaehle genau!)
+- H1: Marke + Produktname + Farbe + Keyword
+- H2: keyword-reich
+- 2 Fliesstext-Absätze, min. 300 Wörter
+- Markenname min. 3x erwähnen
+- Styling als natürlicher Text, keine Keyword-Liste
+- Details beginnt mit: Marke: [Marke]
+- seo_title: MAXIMAL 56 Zeichen
+- meta_description: MAXIMAL 155 Zeichen
 
 Filterkategorien:
 Kleidung: Bottoms, Knitwear, Tops, Dresses, Outerwear, Sets, Swimwear
@@ -74,15 +61,15 @@ Schuhe: Sandalen, Ballerinas, Slip-Ins, Sneaker, Stiefel
 Accessoires: Hair Clips, Schmuck, Sonnenbrillen, Taschen, Accessoires, Bags, Caps, Gürtel, Halstücher, Schals
 Lifestyle: Bücher, Gutschein, Home Goods, Kaffee, Kerzen, Spiele, Schreibwaren, Feuerzeuge
 
-Erstelle alle 6 Texte. Antworte NUR mit JSON:`;
+Erstelle 8 Texte (DE + EN). Antworte NUR mit JSON.`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 3000,
-        system: 'Du antwortest AUSSCHLIESSLICH mit validem JSON. Kein Text davor oder danach, keine Backticks. Nur reines JSON-Objekt mit diesen 6 Feldern: details_pflege, groesse_passform, seo_text, seo_title, meta_description, filter_kategorie. KRITISCH: seo_title MAXIMAL 70 Zeichen, meta_description MAXIMAL 155 Zeichen.',
+        max_tokens: 4000,
+        system: 'Du antwortest AUSSCHLIESSLICH mit validem JSON ohne Backticks. JSON mit 8 Feldern: details_pflege, groesse_passform, seo_text, seo_title, meta_description, filter_kategorie, seo_text_en, meta_description_en. KRITISCH: seo_title max 56 Zeichen, meta_description max 155 Zeichen. Umlaute ä ö ü IMMER behalten!',
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -92,17 +79,14 @@ Erstelle alle 6 Texte. Antworte NUR mit JSON:`;
 
     const data = JSON.parse(responseText);
     let rawText = data.content?.[0]?.text || '';
-    console.log('Raw response:', rawText.substring(0, 300));
-
+    console.log('Raw:', rawText.substring(0, 200));
     rawText = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
 
     let parsed = null;
-
     try {
       const jsonMatch = rawText.match(/\{[\s\S]*\}/);
       if (jsonMatch) parsed = JSON.parse(jsonMatch[0]);
     } catch(e1) {
-      console.log('Direct parse failed:', e1.message);
       try {
         let fixed = rawText.match(/\{[\s\S]*\}/)?.[0] || rawText;
         fixed = fixed.replace(/:\s*"([\s\S]*?)(?=",\s*"|\s*"\s*\})/g, (match, val) => {
@@ -111,30 +95,21 @@ Erstelle alle 6 Texte. Antworte NUR mit JSON:`;
         });
         parsed = JSON.parse(fixed);
       } catch(e2) {
-        console.log('Fixed parse also failed:', e2.message);
         return { statusCode: 500, headers, body: JSON.stringify({ error: 'JSON parse failed: ' + e2.message }) };
       }
     }
 
-    if (!parsed) return { statusCode: 500, headers, body: JSON.stringify({ error: 'No parsed result' }) };
+    if (!parsed) return { statusCode: 500, headers, body: JSON.stringify({ error: 'No result' }) };
 
-    // Hard enforce character limits
+    // Add | Studio Easy to title
     if (parsed.seo_title) {
-      // Remove | Studio Easy if Claude added it, we'll add it ourselves
       parsed.seo_title = parsed.seo_title.replace(/\s*\|\s*Studio Easy\s*$/i, '').trim();
-      // Add | Studio Easy and truncate to 70 chars
       const withSuffix = parsed.seo_title + ' | Studio Easy';
-      if (withSuffix.length <= 70) {
-        parsed.seo_title = withSuffix;
-      } else {
-        // Truncate title to fit
-        const maxTitleLength = 70 - ' | Studio Easy'.length;
-        parsed.seo_title = parsed.seo_title.substring(0, maxTitleLength).trim() + ' | Studio Easy';
-      }
+      parsed.seo_title = withSuffix.length <= 70 ? withSuffix : parsed.seo_title.substring(0, 56).trim() + ' | Studio Easy';
     }
-    if (parsed.meta_description && parsed.meta_description.length > 155) {
-      parsed.meta_description = parsed.meta_description.substring(0, 152) + '...';
-    }
+
+    if (parsed.meta_description?.length > 155) parsed.meta_description = parsed.meta_description.substring(0, 152) + '...';
+    if (parsed.meta_description_en?.length > 155) parsed.meta_description_en = parsed.meta_description_en.substring(0, 152) + '...';
 
     data.content[0].text = JSON.stringify(parsed);
     return { statusCode: 200, headers, body: JSON.stringify(data) };
