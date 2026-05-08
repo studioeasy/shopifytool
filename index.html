@@ -362,9 +362,35 @@ function renderProductList() {
 
 function selectProduct(rowIndex) {
   const header = sheetData[0];
-  const ci = { marke: header.indexOf('Marke'), produkt: header.indexOf('Produkt'), farbe: header.indexOf('Farbe'), beschreibung: header.indexOf('Beschreibung'), ek: header.indexOf('EK'), vk: header.indexOf('VK'), sku: header.indexOf('SKU'), barcode: header.indexOf('Barcode'), shopifyId: header.indexOf('Shopify ID') };
+  const sizeKeys = ['XS','S','M','L','XL','34','36','38','40','42','44','25','26','27','28','29','30','37','39','41','OS'];
+  const ci = {
+    marke: header.indexOf('Marke'),
+    produkt: header.indexOf('Produkt'),
+    farbe: header.indexOf('Farbe'),
+    beschreibung: header.indexOf('Beschreibung'),
+    ek: header.indexOf('EK'),
+    vk: header.indexOf('VK'),
+    sku: header.indexOf('SKU'),
+    barcode: header.indexOf('Barcode'),
+    shopifyId: header.indexOf('Shopify ID')
+  };
+  // Map size columns
+  const sizeIndices = {};
+  sizeKeys.forEach(size => {
+    const idx = header.indexOf(size);
+    if (idx >= 0) sizeIndices[size] = idx;
+  });
+
   const row = sheetData[rowIndex];
   currentRowIndex = rowIndex;
+
+  // Build groessen object from row
+  const groessen = {};
+  Object.entries(sizeIndices).forEach(([size, idx]) => {
+    const val = row[idx];
+    if (val && val.trim() !== '') groessen[size] = val.trim();
+  });
+
   currentProduct = {
     marke: row[ci.marke]||'',
     produkt: row[ci.produkt]||'',
@@ -374,6 +400,7 @@ function selectProduct(rowIndex) {
     vk: (row[ci.vk]||'').replace(/[^\d,\.]/g,'').replace(',','.'),
     sku: row[ci.sku]||'',
     barcode: row[ci.barcode]||'',
+    groessen,
     shopifyIdColIndex: ci.shopifyId
   };
   document.getElementById('view-step1').style.display = 'none';
@@ -414,14 +441,14 @@ async function generateTexts() {
     document.getElementById('meta-desc').value = parsed.meta_description || '';
     updateCount('seo-title','seo-title-count',70);
     updateCount('meta-desc','meta-desc-count',155);
-    // Auto-select suggested filter category
+    // Store EN texts for later use
+    currentProduct.seoTextEn = parsed.seo_text_en || '';
+    currentProduct.metaDescEn = parsed.meta_description_en || '';
+    // Auto-select filter category
     if (parsed.filter_kategorie) {
       const sel = document.getElementById('filter-kategorie');
       for (let i = 0; i < sel.options.length; i++) {
-        if (sel.options[i].value === parsed.filter_kategorie) {
-          sel.selectedIndex = i;
-          break;
-        }
+        if (sel.options[i].value === parsed.filter_kategorie) { sel.selectedIndex = i; break; }
       }
     }
   } catch(e) {
@@ -458,11 +485,14 @@ async function createShopifyProduct() {
         farbe,
         marke,
         produkt: currentProduct.produkt,
+        groessen: currentProduct.groessen || {},
         filterKategorie: document.getElementById('filter-kategorie').value,
         detailsText: getTextValue('details'),
         groesseText: getTextValue('groesse'),
         seoTitle,
-        seoMeta: metaDesc
+        seoMeta: metaDesc,
+        seoTextEn: currentProduct.seoTextEn || '',
+        metaDescEn: currentProduct.metaDescEn || ''
       })
     });
     const data = await resp.json();
