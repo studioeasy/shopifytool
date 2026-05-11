@@ -138,6 +138,18 @@ exports.handler = async function(event, context) {
       }`, { metaobject: { type: 'grosse_passform', handle: makeHandle(title + '-groesse'), capabilities: { publishable: { status: 'ACTIVE' } }, fields: [{ key: 'grosse_passform', value: groesseText }] } });
     const groesseId = groesseResult?.data?.metaobjectCreate?.metaobject?.id;
 
+    // Fire-and-forget metaobject translations (separate function to avoid timeout)
+    try {
+      fetch('https://produktanlegen.netlify.app/.netlify/functions/translate-metaobjects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopifyToken, detailsId, groesseId, detailsText, groesseText })
+      }).catch(e => console.log('Metaobj translation fire-and-forget error:', e.message));
+      console.log('Metaobj translation triggered');
+    } catch(e) {
+      console.log('Metaobj translation trigger error:', e.message);
+    }
+
     // --- FIND PHOTOS ---
     const photos = await findPhotos();
 
@@ -301,6 +313,78 @@ exports.handler = async function(event, context) {
         }
       } catch(e) {
         console.log('Translation error:', e.message);
+      }
+    }
+
+    // --- TRANSLATE METAOBJECTS ---
+    async function translateMetaobject(metaobjId, fieldKey, enText) {
+      if (!metaobjId || !enText) return;
+      try {
+        await new Promise(r => setTimeout(r, 500));
+        const translatableResult = await gql(`
+          query GetTranslatable($resourceId: ID!) {
+            translatableResource(resourceId: $resourceId) {
+              translatableContent { key value digest locale }
+            }
+          }`, { resourceId: metaobjId });
+
+        const content = translatableResult?.data?.translatableResource?.translatableContent || [];
+        const fieldContent = content.find(c => c.key === fieldKey);
+        console.log('Metaobj translatable', fieldKey, ':', fieldContent ? 'found' : 'NOT FOUND');
+
+        if (fieldContent?.digest) {
+          const transResult = await gql(`
+            mutation TranslationsRegister($resourceId: ID!, $translations: [TranslationInput!]!) {
+              translationsRegister(resourceId: $resourceId, translations: $translations) {
+                translations { key locale value }
+                userErrors { field message }
+              }
+            }`, { resourceId: metaobjId, translations: [{ key: fieldKey, value: enText, locale: 'en', translatableContentDigest: fieldContent.digest }] });
+          console.log('Metaobj translation result:', JSON.stringify(transResult?.data?.translationsRegister?.userErrors));
+        }
+      } catch(e) {
+        console.log('Metaobj translation error:', e.message);
+      }
+    }
+
+    // Generate EN versions of metafield texts via Claude
+    if ((detailsId || groesseId) && (seoTextEn || metaDescEn)) {
+      try {
+        const apiKey = process.env.ANTHROPIC_API_KEY;
+        if (apiKey) {
+          const enPrompt = `Translate these German product texts to English for the shop Studio Easy. Keep the same format and structure. Only return JSON with two fields: details_en and groesse_en.
+
+Details & Pflege (DE):
+${detailsText}
+
+Grösse & Passform (DE):
+${groesseText}`;
+
+          const enResp = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+            body: JSON.stringify({
+              model: 'claude-sonnet-4-6',
+              max_tokens: 1000,
+              system: 'Return ONLY valid JSON with fields: details_en, groesse_en. No backticks.',
+              messages: [{ role: 'user', content: enPrompt }]
+            })
+          });
+          const enData = await enResp.json();
+          const enRaw = enData.content?.[0]?.text || '{}';
+          const enParsed = JSON.parse(enRaw.replace(/```json\n?|```\n?/g, '').trim());
+
+          if (detailsId && enParsed.details_en) {
+            await new Promise(r => setTimeout(r, 1500));
+            await translateMetaobject(detailsId, 'details_pflege', enParsed.details_en);
+          }
+          if (groesseId && enParsed.groesse_en) {
+            await new Promise(r => setTimeout(r, 1500));
+            await translateMetaobject(groesseId, 'grosse_passform', enParsed.groesse_en);
+          }
+        }
+      } catch(e) {
+        console.log('Metaobj EN translation error:', e.message);
       }
     }
 
