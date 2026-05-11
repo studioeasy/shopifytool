@@ -138,6 +138,18 @@ exports.handler = async function(event, context) {
       }`, { metaobject: { type: 'grosse_passform', handle: makeHandle(title + '-groesse'), capabilities: { publishable: { status: 'ACTIVE' } }, fields: [{ key: 'grosse_passform', value: groesseText }] } });
     const groesseId = groesseResult?.data?.metaobjectCreate?.metaobject?.id;
 
+    // Fire-and-forget metaobject translations (separate function to avoid timeout)
+    try {
+      fetch('https://produktanlegen.netlify.app/.netlify/functions/translate-metaobjects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopifyToken, detailsId, groesseId, detailsText, groesseText })
+      }).catch(e => console.log('Metaobj translation fire-and-forget error:', e.message));
+      console.log('Metaobj translation triggered');
+    } catch(e) {
+      console.log('Metaobj translation trigger error:', e.message);
+    }
+
     // --- FIND PHOTOS ---
     const photos = await findPhotos();
 
