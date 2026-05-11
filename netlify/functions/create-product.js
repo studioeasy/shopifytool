@@ -143,27 +143,26 @@ exports.handler = async function(event, context) {
 
     // --- BUILD VARIANTS ---
     const finalBarcode = (!barcode || barcode.trim() === '') ? 'kundenspezifisch' : barcode;
-    let variants = [];
-
-    // Check if we have size variants
+    // Clean price - ensure it's a valid decimal string
+    const cleanPrice = String(price).replace(/[^\d,\.]/g, '').replace(',', '.');
     const sizeKeys = ['XS','S','M','L','XL','34','36','38','40','42','44','25','26','27','28','29','30','37','39','41','OS'];
     const activeGroessen = groessen ? Object.entries(groessen).filter(([k,v]) => v !== '' && v !== null && v !== undefined && sizeKeys.includes(k)) : [];
+    console.log('Price:', cleanPrice, 'Sizes:', activeGroessen.length);
 
+    let variants = [];
     if (activeGroessen.length > 0) {
-      variants = activeGroessen.map(([size, qty]) => ({
+      variants = activeGroessen.map(([size]) => ({
         option1: size,
-        price,
+        price: cleanPrice,
         taxable: true,
         barcode: finalBarcode,
         weight: 0.5,
         weight_unit: 'kg',
         inventory_management: 'shopify',
-        inventory_quantity: parseInt(qty) || 0
+        sku: sku ? sku + '-' + size : undefined
       }));
-      if (sku) variants.forEach((v, i) => { v.sku = sku + (variants.length > 1 ? '-' + v.option1 : ''); });
     } else {
-      variants = [{ price, taxable: true, barcode: finalBarcode, weight: 0.5, weight_unit: 'kg', inventory_management: 'shopify' }];
-      if (sku) variants[0].sku = sku;
+      variants = [{ price: cleanPrice, taxable: true, barcode: finalBarcode, weight: 0.5, weight_unit: 'kg', sku: sku || undefined }];
     }
 
     const metafields = [
@@ -172,11 +171,7 @@ exports.handler = async function(event, context) {
     ];
     if (filterKategorie) metafields.push({ namespace: 'custom', key: 'filter_kategorie', value: filterKategorie, type: 'single_line_text_field' });
 
-    const productPayload = {
-      title, body_html: bodyHtml, vendor, status: 'draft', published_scope: 'global',
-      variants,
-      metafields
-    };
+    const productPayload = { title, body_html: bodyHtml, vendor, status: 'draft', published_scope: 'global', variants, metafields };
     if (activeGroessen.length > 0) productPayload.options = [{ name: 'Grösse', values: activeGroessen.map(([k]) => k) }];
 
     // --- CREATE PRODUCT ---
@@ -191,41 +186,31 @@ exports.handler = async function(event, context) {
     const pid = productData.product.id;
     const productGid = 'gid://shopify/Product/' + pid;
 
+    // --- SET PRICE ON ALL VARIANTS (in case Shopify only set it on first) ---
+    for (const variant of productData.product.variants || []) {
+      await fetch('https://' + STORE + '/admin/api/2026-01/variants/' + variant.id + '.json', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
+        body: JSON.stringify({ variant: { id: variant.id, price: cleanPrice } })
+      });
+    }
+
     // --- LINK METAOBJECTS ---
     const mfInputs = [];
     if (detailsId) mfInputs.push({ namespace: 'custom', key: 'details_pflege', value: detailsId, type: 'metaobject_reference' });
     if (groesseId) mfInputs.push({ namespace: 'custom', key: 'grosse_passform', value: groesseId, type: 'metaobject_reference' });
     if (introBrandId) mfInputs.push({ namespace: 'custom', key: 'intro_brand', value: introBrandId, type: 'metaobject_reference' });
     mfInputs.push({ namespace: 'custom', key: 'lieferung_retoure', value: LIEFERUNG_GID, type: 'metaobject_reference' });
-
-    await gql(`
-      mutation UpdateProduct($input: ProductInput!) {
-        productUpdate(input: $input) { product { id } userErrors { field message } }
-      }`, { input: { id: productGid, metafields: mfInputs } });
+    await gql(`mutation UpdateProduct($input: ProductInput!) { productUpdate(input: $input) { product { id } userErrors { field message } } }`, { input: { id: productGid, metafields: mfInputs } });
 
     // --- ADD TO COLLECTIONS ---
-    const collectionsResult = await gql(`
-      query {
-        collections(first: 100) {
-          nodes { id title }
-        }
-      }`, {});
+    const collectionsResult = await gql(`query { collections(first: 100) { nodes { id title } } }`, {});
     const allCollections = collectionsResult?.data?.collections?.nodes || [];
-    console.log('Collections found:', allCollections.length);
-
     const targetCollections = allCollections.filter(c =>
-      c.title === 'New Arrivals' ||
-      c.title.toLowerCase() === marke.toLowerCase()
+      c.title === 'New Arrivals' || c.title.toLowerCase() === marke.toLowerCase()
     );
-
     for (const collection of targetCollections) {
-      await gql(`
-        mutation AddToCollection($id: ID!, $productIds: [ID!]!) {
-          collectionAddProducts(id: $id, productIds: $productIds) {
-            collection { id }
-            userErrors { field message }
-          }
-        }`, { id: collection.id, productIds: [productGid] });
+      await gql(`mutation AddToCollection($id: ID!, $productIds: [ID!]!) { collectionAddProducts(id: $id, productIds: $productIds) { collection { id } userErrors { field message } } }`, { id: collection.id, productIds: [productGid] });
       console.log('Added to collection:', collection.title);
     }
 
@@ -233,13 +218,7 @@ exports.handler = async function(event, context) {
     const channelsResult = await gql(`query { publications(first: 20) { nodes { id name } } }`, {});
     const channels = channelsResult?.data?.publications?.nodes || [];
     for (const channel of channels) {
-      await gql(`
-        mutation PublishProduct($id: ID!, $input: [PublicationInput!]!) {
-          publishablePublish(id: $id, input: $input) {
-            publishable { availablePublicationsCount { count } }
-            userErrors { field message }
-          }
-        }`, { id: productGid, input: [{ publicationId: channel.id }] });
+      await gql(`mutation PublishProduct($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { publishable { availablePublicationsCount { count } } userErrors { field message } } }`, { id: productGid, input: [{ publicationId: channel.id }] });
     }
 
     // --- UPLOAD PHOTOS ---
@@ -254,21 +233,19 @@ exports.handler = async function(event, context) {
           headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
           body: JSON.stringify({ image: { attachment: base64, filename: newName, alt: altText } })
         });
-        console.log('Uploaded photo:', newName);
       } catch(e) { console.log('Photo error:', e.message); }
     }
 
-    // --- EK AS COST ---
+    // --- EK AS COST (first variant only) ---
     if (ek && productData.product.variants?.[0]?.inventory_item_id) {
-      const inventoryItemId = productData.product.variants[0].inventory_item_id;
-      await fetch('https://' + STORE + '/admin/api/2026-01/inventory_items/' + inventoryItemId + '.json', {
+      await fetch('https://' + STORE + '/admin/api/2026-01/inventory_items/' + productData.product.variants[0].inventory_item_id + '.json', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
-        body: JSON.stringify({ inventory_item: { id: inventoryItemId, cost: ek } })
+        body: JSON.stringify({ inventory_item: { id: productData.product.variants[0].inventory_item_id, cost: ek } })
       });
     }
 
-    // --- SEO + TRANSLATIONS ---
+    // --- SEO ---
     if (seoTitle || seoMeta) {
       await fetch('https://' + STORE + '/admin/api/2026-01/products/' + pid + '.json', {
         method: 'PUT',
@@ -277,21 +254,78 @@ exports.handler = async function(event, context) {
       });
     }
 
-    // --- ENGLISH TRANSLATIONS ---
-    if (seoTextEn || metaDescEn) {
-      const translations = [];
-      if (seoTextEn) translations.push({ key: 'body_html', value: seoTextEn, locale: 'en', translatableContentDigest: '' });
-      if (metaDescEn) translations.push({ key: 'meta_description', value: metaDescEn, locale: 'en', translatableContentDigest: '' });
+    // Small delay to let Shopify index the content
+    await new Promise(r => setTimeout(r, 1500));
 
-      if (translations.length > 0) {
-        const transResult = await gql(`
-          mutation TranslationsRegister($resourceId: ID!, $translations: [TranslationInput!]!) {
-            translationsRegister(resourceId: $resourceId, translations: $translations) {
-              translations { key locale value }
-              userErrors { field message }
+    // --- ENGLISH TRANSLATIONS via translatableContent ---
+    if (seoTextEn || metaDescEn) {
+      try {
+        const translatableResult = await gql(`
+          query GetTranslatable($resourceId: ID!) {
+            translatableResource(resourceId: $resourceId) {
+              translatableContent {
+                key
+                value
+                digest
+                locale
+              }
             }
-          }`, { resourceId: productGid, translations });
-        console.log('Translations:', JSON.stringify(transResult?.data?.translationsRegister?.userErrors));
+          }`, { resourceId: productGid });
+
+        const content = translatableResult?.data?.translatableResource?.translatableContent || [];
+        console.log('Translatable keys:', content.map(c => c.key + ':' + (c.digest ? c.digest.substring(0,8) : 'null')));
+
+        const translations = [];
+        if (seoTextEn) {
+          const bodyContent = content.find(c => c.key === 'body_html');
+          console.log('body_html content:', bodyContent ? 'found, digest: ' + bodyContent.digest?.substring(0,8) : 'NOT FOUND');
+          if (bodyContent?.digest) translations.push({ key: 'body_html', value: seoTextEn, locale: 'en', translatableContentDigest: bodyContent.digest });
+        }
+        if (metaDescEn) {
+          const metaContent = content.find(c => c.key === 'meta_description');
+          console.log('meta_description content:', metaContent ? 'found, digest: ' + metaContent.digest?.substring(0,8) : 'NOT FOUND');
+          if (metaContent?.digest) translations.push({ key: 'meta_description', value: metaDescEn, locale: 'en', translatableContentDigest: metaContent.digest });
+        }
+
+        if (translations.length > 0) {
+          const transResult = await gql(`
+            mutation TranslationsRegister($resourceId: ID!, $translations: [TranslationInput!]!) {
+              translationsRegister(resourceId: $resourceId, translations: $translations) {
+                translations { key locale value }
+                userErrors { field message }
+              }
+            }`, { resourceId: productGid, translations });
+          console.log('Translation result:', JSON.stringify(transResult?.data?.translationsRegister));
+        } else {
+          console.log('No valid translations to register');
+        }
+      } catch(e) {
+        console.log('Translation error:', e.message);
+      }
+    }
+
+    // --- SET INVENTORY FOR SIZE VARIANTS ---
+    if (activeGroessen.length > 0) {
+      // Get location ID first
+      const locationsResp = await fetch('https://' + STORE + '/admin/api/2026-01/locations.json', {
+        headers: { 'X-Shopify-Access-Token': shopifyToken }
+      });
+      const locationsData = await locationsResp.json();
+      const locationId = locationsData.locations?.[0]?.id;
+
+      if (locationId) {
+        for (let i = 0; i < activeGroessen.length; i++) {
+          const [size, qty] = activeGroessen[i];
+          const variant = productData.product.variants?.[i];
+          if (variant?.inventory_item_id && qty) {
+            await fetch('https://' + STORE + '/admin/api/2026-01/inventory_levels/set.json', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
+              body: JSON.stringify({ location_id: locationId, inventory_item_id: variant.inventory_item_id, available: parseInt(qty) || 0 })
+            });
+            console.log('Set inventory for size:', size, qty);
+          }
+        }
       }
     }
 
