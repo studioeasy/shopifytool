@@ -321,7 +321,7 @@ function goToStep1() {
 async function loadSheet() {
   document.getElementById('sheet-products-list').innerHTML = '<p style="font-size:13px;color:#666;">Sheet wird geladen...</p>';
   try {
-    const resp = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + '/values/A1:J50', { headers: { 'Authorization': 'Bearer ' + googleAccessToken } });
+    const resp = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + '/values/A1:AZ100', { headers: { 'Authorization': 'Bearer ' + googleAccessToken } });
     const data = await resp.json();
     if (data.error) { setStatus('status-step1', 'Sheets-Fehler: ' + data.error.message, 'error'); return; }
     sheetData = data.values || [];
