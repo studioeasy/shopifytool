@@ -80,18 +80,6 @@ exports.handler = async function(event, context) {
       }`, { metaobject: { type: 'grosse_passform', handle: makeHandle(title + '-groesse'), capabilities: { publishable: { status: 'ACTIVE' } }, fields: [{ key: 'grosse_passform', value: groesseText }] } });
     const groesseId = groesseResult?.data?.metaobjectCreate?.metaobject?.id;
 
-    // Fire-and-forget metaobject translations (separate function to avoid timeout)
-    try {
-      fetch('https://produktanlegen.netlify.app/.netlify/functions/translate-metaobjects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shopifyToken, detailsId, groesseId, detailsText, groesseText, productGid, seoText: bodyHtml, seoMeta })
-      }).catch(e => console.log('Metaobj translation fire-and-forget error:', e.message));
-      console.log('Metaobj translation triggered');
-    } catch(e) {
-      console.log('Metaobj translation trigger error:', e.message);
-    }
-
     // --- BUILD VARIANTS ---
     const finalBarcode = (!barcode || barcode.trim() === '') ? 'kundenspezifisch' : barcode;
     // Clean price - ensure it's a valid decimal string
@@ -184,6 +172,18 @@ exports.handler = async function(event, context) {
       console.log('Photo upload trigger error:', e.message);
     }
 
+    // Fire-and-forget translations (separate function to avoid timeout)
+    try {
+      fetch('https://produktanlegen.netlify.app/.netlify/functions/translate-metaobjects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopifyToken, detailsId, groesseId, detailsText, groesseText, productGid, seoText: bodyHtml, seoMeta })
+      }).catch(e => console.log('Translation fire-and-forget error:', e.message));
+      console.log('Translation triggered');
+    } catch(e) {
+      console.log('Translation trigger error:', e.message);
+    }
+
     // --- EK AS COST (first variant only) ---
     if (ek && productData.product.variants?.[0]?.inventory_item_id) {
       await fetch('https://' + STORE + '/admin/api/2026-01/inventory_items/' + productData.product.variants[0].inventory_item_id + '.json', {
@@ -200,87 +200,6 @@ exports.handler = async function(event, context) {
         headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
         body: JSON.stringify({ product: { id: pid, metafields_global_title_tag: seoTitle, metafields_global_description_tag: seoMeta } })
       });
-    }
-
-    // Small delay to let Shopify index the content
-    await new Promise(r => setTimeout(r, 1500));
-
-    // --- ENGLISH TRANSLATIONS via translatableContent ---
-    if (seoTextEn || metaDescEn) {
-      try {
-        const translatableResult = await gql(`
-          query GetTranslatable($resourceId: ID!) {
-            translatableResource(resourceId: $resourceId) {
-              translatableContent {
-                key
-                value
-                digest
-                locale
-              }
-            }
-          }`, { resourceId: productGid });
-
-        const content = translatableResult?.data?.translatableResource?.translatableContent || [];
-        console.log('Translatable keys:', content.map(c => c.key + ':' + (c.digest ? c.digest.substring(0,8) : 'null')));
-
-        const translations = [];
-        if (seoTextEn) {
-          const bodyContent = content.find(c => c.key === 'body_html');
-          console.log('body_html content:', bodyContent ? 'found, digest: ' + bodyContent.digest?.substring(0,8) : 'NOT FOUND');
-          if (bodyContent?.digest) translations.push({ key: 'body_html', value: seoTextEn, locale: 'en', translatableContentDigest: bodyContent.digest });
-        }
-        if (metaDescEn) {
-          const metaContent = content.find(c => c.key === 'meta_description');
-          console.log('meta_description content:', metaContent ? 'found, digest: ' + metaContent.digest?.substring(0,8) : 'NOT FOUND');
-          if (metaContent?.digest) translations.push({ key: 'meta_description', value: metaDescEn, locale: 'en', translatableContentDigest: metaContent.digest });
-        }
-
-        if (translations.length > 0) {
-          const transResult = await gql(`
-            mutation TranslationsRegister($resourceId: ID!, $translations: [TranslationInput!]!) {
-              translationsRegister(resourceId: $resourceId, translations: $translations) {
-                translations { key locale value }
-                userErrors { field message }
-              }
-            }`, { resourceId: productGid, translations });
-          console.log('Translation result:', JSON.stringify(transResult?.data?.translationsRegister));
-        } else {
-          console.log('No valid translations to register');
-        }
-      } catch(e) {
-        console.log('Translation error:', e.message);
-      }
-    }
-
-    // --- TRANSLATE METAOBJECTS ---
-    async function translateMetaobject(metaobjId, fieldKey, enText) {
-      if (!metaobjId || !enText) return;
-      try {
-        await new Promise(r => setTimeout(r, 500));
-        const translatableResult = await gql(`
-          query GetTranslatable($resourceId: ID!) {
-            translatableResource(resourceId: $resourceId) {
-              translatableContent { key value digest locale }
-            }
-          }`, { resourceId: metaobjId });
-
-        const content = translatableResult?.data?.translatableResource?.translatableContent || [];
-        const fieldContent = content.find(c => c.key === fieldKey);
-        console.log('Metaobj translatable', fieldKey, ':', fieldContent ? 'found' : 'NOT FOUND');
-
-        if (fieldContent?.digest) {
-          const transResult = await gql(`
-            mutation TranslationsRegister($resourceId: ID!, $translations: [TranslationInput!]!) {
-              translationsRegister(resourceId: $resourceId, translations: $translations) {
-                translations { key locale value }
-                userErrors { field message }
-              }
-            }`, { resourceId: metaobjId, translations: [{ key: fieldKey, value: enText, locale: 'en', translatableContentDigest: fieldContent.digest }] });
-          console.log('Metaobj translation result:', JSON.stringify(transResult?.data?.translationsRegister?.userErrors));
-        }
-      } catch(e) {
-        console.log('Metaobj translation error:', e.message);
-      }
     }
 
     // --- SET INVENTORY FOR SIZE VARIANTS ---
