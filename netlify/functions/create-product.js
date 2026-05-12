@@ -58,64 +58,6 @@ exports.handler = async function(event, context) {
         .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     }
 
-    // --- GOOGLE DRIVE: Find photos ---
-    async function findPhotos() {
-      if (!googleToken) return [];
-      try {
-        const rootSearch = await fetch(
-          `https://www.googleapis.com/drive/v3/files?q=name+%3D+'Fotos+Brands'+and+mimeType+%3D+'application%2Fvnd.google-apps.folder'&fields=files(id,name)`,
-          { headers: { 'Authorization': 'Bearer ' + googleToken } }
-        ).then(r => r.json());
-        const rootFolder = rootSearch.files?.[0];
-        if (!rootFolder) { console.log('Root folder not found'); return []; }
-
-        const brandSearch = await fetch(
-          `https://www.googleapis.com/drive/v3/files?q='${rootFolder.id}'+in+parents+and+name+%3D+'${encodeURIComponent(marke)}'+and+mimeType+%3D+'application%2Fvnd.google-apps.folder'&fields=files(id,name)`,
-          { headers: { 'Authorization': 'Bearer ' + googleToken } }
-        ).then(r => r.json());
-        const brandFolder = brandSearch.files?.[0];
-        if (!brandFolder) { console.log('Brand folder not found:', marke); return []; }
-
-        const productSearch = await fetch(
-          `https://www.googleapis.com/drive/v3/files?q=name+%3D+'${encodeURIComponent(produkt)}'+and+mimeType+%3D+'application%2Fvnd.google-apps.folder'&fields=files(id,name)`,
-          { headers: { 'Authorization': 'Bearer ' + googleToken } }
-        ).then(r => r.json());
-        const productFolders = productSearch.files || [];
-        if (productFolders.length === 0) { console.log('No product folder:', produkt); return []; }
-
-        const colorNorm = farbe.toLowerCase().replace(/\s+/g, '-');
-        for (const folder of productFolders) {
-          const filesSearch = await fetch(
-            `https://www.googleapis.com/drive/v3/files?q='${folder.id}'+in+parents+and+mimeType+contains+'image/'&fields=files(id,name,mimeType)&orderBy=name`,
-            { headers: { 'Authorization': 'Bearer ' + googleToken } }
-          ).then(r => r.json());
-          const allFiles = filesSearch.files || [];
-          const colorFiles = allFiles.filter(f =>
-            f.name.toLowerCase().includes(colorNorm) ||
-            f.name.toLowerCase().includes(farbe.toLowerCase())
-          );
-          if (colorFiles.length > 0) return colorFiles;
-          if (productFolders.length === 1 && allFiles.length > 0) return allFiles;
-        }
-        return [];
-      } catch(e) {
-        console.log('Drive error:', e.message);
-        return [];
-      }
-    }
-
-    async function downloadAsBase64(fileId) {
-      const resp = await fetch(
-        `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,
-        { headers: { 'Authorization': 'Bearer ' + googleToken } }
-      );
-      const buffer = await resp.arrayBuffer();
-      const bytes = new Uint8Array(buffer);
-      let binary = '';
-      for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-      return btoa(binary);
-    }
-
     // --- FIND INTRO BRAND ---
     let introBrandId = null;
     const brandResult = await gql(`query { metaobjects(type: "intro_brand", first: 50) { nodes { id displayName } } }`, {});
@@ -149,9 +91,6 @@ exports.handler = async function(event, context) {
     } catch(e) {
       console.log('Metaobj translation trigger error:', e.message);
     }
-
-    // --- FIND PHOTOS ---
-    const photos = await findPhotos();
 
     // --- BUILD VARIANTS ---
     const finalBarcode = (!barcode || barcode.trim() === '') ? 'kundenspezifisch' : barcode;
@@ -233,19 +172,16 @@ exports.handler = async function(event, context) {
       await gql(`mutation PublishProduct($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { publishable { availablePublicationsCount { count } } userErrors { field message } } }`, { id: productGid, input: [{ publicationId: channel.id }] });
     }
 
-    // --- UPLOAD PHOTOS ---
-    for (let i = 0; i < photos.length; i++) {
-      try {
-        const base64 = await downloadAsBase64(photos[i].id);
-        const ext = photos[i].name.split('.').pop();
-        const newName = makeHandle(marke + '-' + produkt + '-' + farbe) + '-' + (i + 1) + '.' + ext;
-        const altText = marke + ' ' + produkt + ' ' + farbe + (i === 0 ? ' – Produktbild' : ' – Detailbild ' + i);
-        await fetch('https://' + STORE + '/admin/api/2026-01/products/' + pid + '/images.json', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
-          body: JSON.stringify({ image: { attachment: base64, filename: newName, alt: altText } })
-        });
-      } catch(e) { console.log('Photo error:', e.message); }
+    // Fire-and-forget photo upload (separate function to avoid timeout)
+    try {
+      fetch('https://produktanlegen.netlify.app/.netlify/functions/upload-photos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopifyToken, googleToken, pid, marke, produkt, farbe })
+      }).catch(e => console.log('Photo upload fire-and-forget error:', e.message));
+      console.log('Photo upload triggered');
+    } catch(e) {
+      console.log('Photo upload trigger error:', e.message);
     }
 
     // --- EK AS COST (first variant only) ---
