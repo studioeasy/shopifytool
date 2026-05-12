@@ -52,12 +52,10 @@ Exakte Struktur:
 <h2>Styling & Anlässe</h2>
 <p>[3-4 Sätze natürlicher Text mit konkreten Outfit-Kombis und Anlässen. KEINE Liste!]</p>
 
-=== FELDER 4-8 ===
+=== FELDER 4-6 ===
 - seo_title: MAXIMAL 56 Zeichen (ohne | Studio Easy)
 - meta_description: MAXIMAL 155 Zeichen
 - filter_kategorie: aus Liste unten
-- seo_text_en: Englische Version von seo_text (gleiche HTML-Struktur)
-- meta_description_en: MAXIMAL 155 Zeichen
 
 Filterkategorien:
 Kleidung: Bottoms, Knitwear, Tops, Dresses, Outerwear, Sets, Swimwear
@@ -65,7 +63,7 @@ Schuhe: Sandalen, Ballerinas, Slip-Ins, Sneaker, Stiefel
 Accessoires: Hair Clips, Schmuck, Sonnenbrillen, Taschen, Accessoires, Bags, Caps, Gürtel, Halstücher, Schals
 Lifestyle: Bücher, Gutschein, Home Goods, Kaffee, Kerzen, Spiele, Schreibwaren, Feuerzeuge
 
-Erstelle alle 8 Texte. Antworte NUR mit JSON.`;
+Erstelle nur die 6 deutschen Texte. Antworte NUR mit JSON.`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -73,7 +71,7 @@ Erstelle alle 8 Texte. Antworte NUR mit JSON.`;
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 4000,
-        system: 'Du antwortest AUSSCHLIESSLICH mit validem JSON ohne Backticks. JSON mit 8 Feldern: details_pflege, groesse_passform, seo_text, seo_title, meta_description, filter_kategorie, seo_text_en, meta_description_en. KRITISCH: seo_title max 56 Zeichen, meta_description max 155 Zeichen. Umlaute ä ö ü IMMER behalten!',
+        system: 'Du antwortest AUSSCHLIESSLICH mit validem JSON ohne Backticks. JSON mit 6 Feldern: details_pflege, groesse_passform, seo_text, seo_title, meta_description, filter_kategorie. KRITISCH: seo_title max 56 Zeichen, meta_description max 155 Zeichen. Umlaute ä ö ü IMMER behalten!',
         messages: [{ role: 'user', content: prompt }]
       })
     });
