@@ -34,11 +34,11 @@ exports.handler = async function(event, context) {
         if (!brandFolder) return [];
 
         const productSearch = await fetch(
-          `https://www.googleapis.com/drive/v3/files?q=name+%3D+'${encodeURIComponent(produkt)}'+and+mimeType+%3D+'application%2Fvnd.google-apps.folder'&fields=files(id,name)`,
+          `https://www.googleapis.com/drive/v3/files?q=name+contains+'${encodeURIComponent(produkt)}'+and+mimeType+%3D+'application%2Fvnd.google-apps.folder'&fields=files(id,name)`,
           { headers: { 'Authorization': 'Bearer ' + googleToken } }
         ).then(r => r.json());
         const productFolders = productSearch.files || [];
-        if (productFolders.length === 0) return [];
+        if (productFolders.length === 0) { console.log('No product folder:', produkt); return []; }
 
         const colorNorm = farbe.toLowerCase().replace(/\s+/g, '-');
         for (const folder of productFolders) {
