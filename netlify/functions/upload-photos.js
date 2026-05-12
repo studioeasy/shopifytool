@@ -42,6 +42,7 @@ exports.handler = async function(event, context) {
 
         const colorNorm = farbe.toLowerCase().replace(/\s+/g, '-');
         for (const folder of productFolders) {
+          // First check for direct image files matching color
           const filesSearch = await fetch(
             `https://www.googleapis.com/drive/v3/files?q='${folder.id}'+in+parents+and+mimeType+contains+'image/'&fields=files(id,name,mimeType)&orderBy=name`,
             { headers: { 'Authorization': 'Bearer ' + googleToken } }
@@ -52,6 +53,31 @@ exports.handler = async function(event, context) {
             f.name.toLowerCase().includes(farbe.toLowerCase())
           );
           if (colorFiles.length > 0) return colorFiles;
+
+          // Check for color subfolders
+          const subfoldersSearch = await fetch(
+            `https://www.googleapis.com/drive/v3/files?q='${folder.id}'+in+parents+and+mimeType+%3D+'application%2Fvnd.google-apps.folder'&fields=files(id,name)`,
+            { headers: { 'Authorization': 'Bearer ' + googleToken } }
+          ).then(r => r.json());
+          const subfolders = subfoldersSearch.files || [];
+          console.log('Subfolders in product folder:', subfolders.map(f => f.name));
+
+          // Find subfolder matching color
+          const colorSubfolder = subfolders.find(f =>
+            f.name.toLowerCase().includes(farbe.toLowerCase()) ||
+            farbe.toLowerCase().includes(f.name.toLowerCase())
+          );
+          if (colorSubfolder) {
+            const subFilesSearch = await fetch(
+              `https://www.googleapis.com/drive/v3/files?q='${colorSubfolder.id}'+in+parents+and+mimeType+contains+'image/'&fields=files(id,name,mimeType)&orderBy=name`,
+              { headers: { 'Authorization': 'Bearer ' + googleToken } }
+            ).then(r => r.json());
+            const subFiles = subFilesSearch.files || [];
+            console.log('Found photos in color subfolder:', subFiles.map(f => f.name));
+            if (subFiles.length > 0) return subFiles;
+          }
+
+          // Fallback: if only one folder and has direct files
           if (productFolders.length === 1 && allFiles.length > 0) return allFiles;
         }
         return [];
