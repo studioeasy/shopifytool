@@ -308,7 +308,7 @@ exports.handler = async function(event, context) {
       }
     }
 
-    return { statusCode: 200, headers, body: JSON.stringify({ product: productData.product, photosUploaded: photos.length }) };
+    return { statusCode: 200, headers, body: JSON.stringify({ product: productData.product }) };
   } catch(e) {
     console.log('Error:', e.message, e.stack);
     return { statusCode: 500, headers, body: JSON.stringify({ error: e.message }) };
