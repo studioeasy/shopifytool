@@ -47,11 +47,14 @@ Pflegehinweis:
 
 SEO-REGELN:
 - H1: Marke + Produktname + Farbe + Keyword
-- H2: keyword-reich
-- 2 Fliesstext-Absätze, min. 300 Wörter
+- H2: keyword-reich (nur EINER direkt nach H1)
+- 2 Fliesstext-Absätze (p-Tags) nach H2
 - Markenname min. 3x erwähnen
-- Styling als natürlicher Text, keine Keyword-Liste
-- Details beginnt mit: Marke: [Marke]
+- Danach IMMER diese 4 Sektionen:
+  <h2>Details</h2><ul><li>Marke: X</li><li>Modell: X</li><li>Farbe: X</li>...</ul>
+  <h2>Grösse & Passform</h2><ul><li>...</li></ul>
+  <h2>Material & Qualität</h2><ul><li>...</li></ul>
+  <h2>Styling & Anlässe</h2><p>Kurzer Fliesstext, KEINE Liste!</p>
 - seo_title: MAXIMAL 56 Zeichen
 - meta_description: MAXIMAL 155 Zeichen
 
