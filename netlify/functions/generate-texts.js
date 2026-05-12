@@ -24,9 +24,8 @@ Produkt: ${produkt} von ${marke}
 Farbe: ${farbe || 'nicht angegeben'}
 Beschreibung (englisch): ${beschreibung || 'nicht angegeben'}
 
-BEISPIELE fuer Details und Pflege:
-
-Beispiel 1:
+=== FELD 1: details_pflege (PLAINTEXT, KEIN HTML) ===
+Format wie dieses Beispiel:
 Die Raffia Bucket Bag von Zulu und Zephyr - eine handgeflochtene Tasche mit breitem Trageriemen. Grosszügig bemessen für alle Essentials.
 Details:
 - 100 % natürliches Raffia, handgeflochten
@@ -35,28 +34,30 @@ Pflegehinweis:
 - Mit feuchtem Tuch reinigen
 - Flach trocknen
 
-Beispiel 2:
-Der Novantatre Badeanzug von Lido steht für klare Linien und funktionale Eleganz.
-Details:
-- Mittlere Bedeckung (Medium Coverage)
-- Nachhaltiges Lycra, matte Oberfläche
-- Hergestellt in Italien
-Pflegehinweis:
-- Schonwaschgang bei max. 30 Grad
-- Flach trocknen
+=== FELD 2: groesse_passform (PLAINTEXT, KEIN HTML) ===
+Kurz und präzise. Masse falls bekannt. Fit-Empfehlung.
 
-SEO-REGELN:
-- H1: Marke + Produktname + Farbe + Keyword
-- H2: keyword-reich (nur EINER direkt nach H1)
-- 2 Fliesstext-Absätze (p-Tags) nach H2
-- Markenname min. 3x erwähnen
-- Danach IMMER diese 4 Sektionen:
-  <h2>Details</h2><ul><li>Marke: X</li><li>Modell: X</li><li>Farbe: X</li>...</ul>
-  <h2>Grösse & Passform</h2><ul><li>...</li></ul>
-  <h2>Material & Qualität</h2><ul><li>...</li></ul>
-  <h2>Styling & Anlässe</h2><p>Kurzer Fliesstext, KEINE Liste!</p>
-- seo_title: MAXIMAL 56 Zeichen
+=== FELD 3: seo_text (NUR HTML, MIN. 350 WÖRTER) ===
+Exakte Struktur:
+<h1>[Marke] [Produkt] [Farbe] – [Keyword]</h1>
+<h2>[Produkt] [Farbe] – [keyword-reicher Untertitel]</h2>
+<p>[Absatz 1: 4-5 Sätze, Marke + Produkt + Farbe + Besonderheit + warum es toll ist]</p>
+<p>[Absatz 2: 4-5 Sätze, Material + Verarbeitung + Nachhaltigkeit + Styling-Kontext, Marke nochmal erwähnen]</p>
+<h2>Details</h2>
+<ul><li>Marke: ${marke}</li><li>Modell: ${produkt}</li><li>Farbe: ${farbe}</li><li>[weitere Details, min. 5 Punkte]</li></ul>
+<h2>Grösse & Passform</h2>
+<ul><li>[min. 3 Passform-Infos]</li></ul>
+<h2>Material & Qualität</h2>
+<ul><li>[min. 3 Punkte: Material, Verarbeitung, Nachhaltigkeit]</li></ul>
+<h2>Styling & Anlässe</h2>
+<p>[3-4 Sätze natürlicher Text mit konkreten Outfit-Kombis und Anlässen. KEINE Liste!]</p>
+
+=== FELDER 4-8 ===
+- seo_title: MAXIMAL 56 Zeichen (ohne | Studio Easy)
 - meta_description: MAXIMAL 155 Zeichen
+- filter_kategorie: aus Liste unten
+- seo_text_en: Englische Version von seo_text (gleiche HTML-Struktur)
+- meta_description_en: MAXIMAL 155 Zeichen
 
 Filterkategorien:
 Kleidung: Bottoms, Knitwear, Tops, Dresses, Outerwear, Sets, Swimwear
@@ -64,7 +65,7 @@ Schuhe: Sandalen, Ballerinas, Slip-Ins, Sneaker, Stiefel
 Accessoires: Hair Clips, Schmuck, Sonnenbrillen, Taschen, Accessoires, Bags, Caps, Gürtel, Halstücher, Schals
 Lifestyle: Bücher, Gutschein, Home Goods, Kaffee, Kerzen, Spiele, Schreibwaren, Feuerzeuge
 
-Erstelle 8 Texte (DE + EN). Antworte NUR mit JSON.`;
+Erstelle alle 8 Texte. Antworte NUR mit JSON.`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
