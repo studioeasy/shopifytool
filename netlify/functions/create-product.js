@@ -160,6 +160,48 @@ exports.handler = async function(event, context) {
       await gql(`mutation PublishProduct($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { publishable { availablePublicationsCount { count } } userErrors { field message } } }`, { id: productGid, input: [{ publicationId: channel.id }] });
     }
 
+    // --- EK AS COST (first variant only) ---
+    if (ek && productData.product.variants?.[0]?.inventory_item_id) {
+      await fetch('https://' + STORE + '/admin/api/2026-01/inventory_items/' + productData.product.variants[0].inventory_item_id + '.json', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
+        body: JSON.stringify({ inventory_item: { id: productData.product.variants[0].inventory_item_id, cost: ek } })
+      });
+    }
+
+    // --- SEO ---
+    if (seoTitle || seoMeta) {
+      await fetch('https://' + STORE + '/admin/api/2026-01/products/' + pid + '.json', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
+        body: JSON.stringify({ product: { id: pid, metafields_global_title_tag: seoTitle, metafields_global_description_tag: seoMeta } })
+      });
+    }
+
+    // --- SET INVENTORY FOR SIZE VARIANTS ---
+    console.log('activeGroessen:', JSON.stringify(activeGroessen));
+    if (activeGroessen.length > 0) {
+      const locationsResp = await fetch('https://' + STORE + '/admin/api/2026-01/locations.json', {
+        headers: { 'X-Shopify-Access-Token': shopifyToken }
+      });
+      const locationsData = await locationsResp.json();
+      const locationId = locationsData.locations?.[0]?.id;
+      if (locationId) {
+        for (let i = 0; i < activeGroessen.length; i++) {
+          const [size, qty] = activeGroessen[i];
+          const variant = productData.product.variants?.[i];
+          if (variant?.inventory_item_id && qty) {
+            await fetch('https://' + STORE + '/admin/api/2026-01/inventory_levels/set.json', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
+              body: JSON.stringify({ location_id: locationId, inventory_item_id: variant.inventory_item_id, available: parseInt(qty) || 0 })
+            });
+            console.log('Set inventory for size:', size, qty);
+          }
+        }
+      }
+    }
+
     // Fire-and-forget photo upload (separate function to avoid timeout)
     try {
       fetch('https://produktanlegen.netlify.app/.netlify/functions/upload-photos', {
@@ -182,49 +224,6 @@ exports.handler = async function(event, context) {
       console.log('Translation triggered');
     } catch(e) {
       console.log('Translation trigger error:', e.message);
-    }
-
-    // --- EK AS COST (first variant only) ---
-    if (ek && productData.product.variants?.[0]?.inventory_item_id) {
-      await fetch('https://' + STORE + '/admin/api/2026-01/inventory_items/' + productData.product.variants[0].inventory_item_id + '.json', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
-        body: JSON.stringify({ inventory_item: { id: productData.product.variants[0].inventory_item_id, cost: ek } })
-      });
-    }
-
-    // --- SEO ---
-    if (seoTitle || seoMeta) {
-      await fetch('https://' + STORE + '/admin/api/2026-01/products/' + pid + '.json', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
-        body: JSON.stringify({ product: { id: pid, metafields_global_title_tag: seoTitle, metafields_global_description_tag: seoMeta } })
-      });
-    }
-
-    // --- SET INVENTORY FOR SIZE VARIANTS ---
-    if (activeGroessen.length > 0) {
-      // Get location ID first
-      const locationsResp = await fetch('https://' + STORE + '/admin/api/2026-01/locations.json', {
-        headers: { 'X-Shopify-Access-Token': shopifyToken }
-      });
-      const locationsData = await locationsResp.json();
-      const locationId = locationsData.locations?.[0]?.id;
-
-      if (locationId) {
-        for (let i = 0; i < activeGroessen.length; i++) {
-          const [size, qty] = activeGroessen[i];
-          const variant = productData.product.variants?.[i];
-          if (variant?.inventory_item_id && qty) {
-            await fetch('https://' + STORE + '/admin/api/2026-01/inventory_levels/set.json', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
-              body: JSON.stringify({ location_id: locationId, inventory_item_id: variant.inventory_item_id, available: parseInt(qty) || 0 })
-            });
-            console.log('Set inventory for size:', size, qty);
-          }
-        }
-      }
     }
 
     return { statusCode: 200, headers, body: JSON.stringify({ product: productData.product }) };
