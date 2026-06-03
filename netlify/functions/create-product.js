@@ -84,9 +84,10 @@ exports.handler = async function(event, context) {
     const finalBarcode = (!barcode || barcode.trim() === '') ? 'kundenspezifisch' : barcode;
     // Clean price - ensure it's a valid decimal string
     const cleanPrice = String(price).replace(/[^\d,\.]/g, '').replace(',', '.');
-    const sizeKeys = ['XS','S','M','L','XL','34','36','38','40','42','44','25','26','27','28','29','30','37','39','41','OS'];
+    const sizeKeys = ['XS','S','M','L','XL','34','36','38','40','42','44','25','26','27','28','29','30','37','39','41'];
     const activeGroessen = groessen ? Object.entries(groessen).filter(([k,v]) => v !== '' && v !== null && v !== undefined && sizeKeys.includes(k)) : [];
-    console.log('Price:', cleanPrice, 'Sizes:', activeGroessen.length);
+    const osQty = groessen?.['OS'] || null;
+    console.log('Price:', cleanPrice, 'Sizes:', activeGroessen.length, 'OS qty:', osQty);
 
     let variants = [];
     if (activeGroessen.length > 0) {
@@ -180,23 +181,37 @@ exports.handler = async function(event, context) {
 
     // --- SET INVENTORY FOR SIZE VARIANTS ---
     console.log('activeGroessen:', JSON.stringify(activeGroessen));
-    if (activeGroessen.length > 0) {
+    if (activeGroessen.length > 0 || osQty) {
       const locationsResp = await fetch('https://' + STORE + '/admin/api/2026-01/locations.json', {
         headers: { 'X-Shopify-Access-Token': shopifyToken }
       });
       const locationsData = await locationsResp.json();
       const locationId = locationsData.locations?.[0]?.id;
       if (locationId) {
-        for (let i = 0; i < activeGroessen.length; i++) {
-          const [size, qty] = activeGroessen[i];
-          const variant = productData.product.variants?.[i];
-          if (variant?.inventory_item_id && qty) {
+        if (activeGroessen.length > 0) {
+          // Multiple size variants
+          for (let i = 0; i < activeGroessen.length; i++) {
+            const [size, qty] = activeGroessen[i];
+            const variant = productData.product.variants?.[i];
+            if (variant?.inventory_item_id && qty) {
+              await fetch('https://' + STORE + '/admin/api/2026-01/inventory_levels/set.json', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
+                body: JSON.stringify({ location_id: locationId, inventory_item_id: variant.inventory_item_id, available: parseInt(qty) || 0 })
+              });
+              console.log('Set inventory for size:', size, qty);
+            }
+          }
+        } else if (osQty) {
+          // Single variant - use OS quantity
+          const variant = productData.product.variants?.[0];
+          if (variant?.inventory_item_id) {
             await fetch('https://' + STORE + '/admin/api/2026-01/inventory_levels/set.json', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
-              body: JSON.stringify({ location_id: locationId, inventory_item_id: variant.inventory_item_id, available: parseInt(qty) || 0 })
+              body: JSON.stringify({ location_id: locationId, inventory_item_id: variant.inventory_item_id, available: parseInt(osQty) || 0 })
             });
-            console.log('Set inventory for size:', size, qty);
+            console.log('Set inventory for single variant:', osQty);
           }
         }
       }
