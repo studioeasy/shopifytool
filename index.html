@@ -518,6 +518,13 @@ async function createShopifyProduct() {
       document.getElementById('success-title').textContent = '"' + title + '" wurde als Entwurf angelegt.';
       document.getElementById('success-sheet-status').textContent = sheetStatus;
       document.getElementById('product-link').href = 'https://' + STORE + '/admin/products/' + pid;
+
+      // Upload photos directly from browser (Netlify can't call itself)
+      fetch('/.netlify/functions/upload-photos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopifyToken: token, googleToken: googleAccessToken, pid, marke, produkt: currentProduct.produkt, farbe })
+      }).then(r => r.json()).then(d => console.log('Photos uploaded:', d)).catch(e => console.log('Photo upload error:', e.message));
     } else {
       setStatus('status-step2', 'Shopify-Fehler: ' + JSON.stringify(data.errors || data), 'error');
       btn.disabled = false; btn.textContent = 'In Shopify anlegen →';
