@@ -85,8 +85,14 @@ exports.handler = async function(event, context) {
     // Clean price - ensure it's a valid decimal string
     const cleanPrice = String(price).replace(/[^\d,\.]/g, '').replace(',', '.');
     const sizeKeys = ['XS','S','M','L','XL','34','36','38','40','42','44','25','26','27','28','29','30','37','39','41'];
-    const activeGroessen = groessen ? Object.entries(groessen).filter(([k,v]) => v !== '' && v !== null && v !== undefined && sizeKeys.includes(k)) : [];
-    const osQty = groessen?.['OS'] || null;
+    const activeGroessen = groessen ? Object.entries(groessen).filter(([k,v]) => {
+      if (!v || v === '' || v === null || v === undefined) return false;
+      if (!sizeKeys.includes(k)) return false;
+      const cleaned = String(v).replace(/[^\d,\.]/g, '').replace(',', '.');
+      return parseFloat(cleaned) > 0;
+    }).map(([k,v]) => [k, String(v).replace(/[^\d,\.]/g, '').replace(',', '.')]) : [];
+    const osRaw = groessen?.['OS'];
+    const osQty = osRaw ? String(osRaw).replace(/[^\d,\.]/g, '').replace(',', '.') : null;
     console.log('Price:', cleanPrice, 'Sizes:', activeGroessen.length, 'OS qty:', osQty);
 
     let variants = [];
@@ -223,8 +229,8 @@ exports.handler = async function(event, context) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ shopifyToken, googleToken, pid, marke, produkt, farbe })
-      }).catch(e => console.log('Photo upload fire-and-forget error:', e.message));
-      console.log('Photo upload triggered');
+      }).then(r => r.json()).then(d => console.log('Photo upload result:', JSON.stringify(d))).catch(e => console.log('Photo upload error:', e.message));
+      console.log('Photo upload triggered for pid:', pid, 'marke:', marke, 'produkt:', produkt);
     } catch(e) {
       console.log('Photo upload trigger error:', e.message);
     }
