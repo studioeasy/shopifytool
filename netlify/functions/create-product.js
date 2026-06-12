@@ -223,18 +223,6 @@ exports.handler = async function(event, context) {
       }
     }
 
-    // Fire-and-forget photo upload (separate function to avoid timeout)
-    try {
-      fetch('https://produktanlegen.netlify.app/.netlify/functions/upload-photos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shopifyToken, googleToken, pid, marke, produkt, farbe })
-      }).then(r => r.json()).then(d => console.log('Photo upload result:', JSON.stringify(d))).catch(e => console.log('Photo upload error:', e.message));
-      console.log('Photo upload triggered for pid:', pid, 'marke:', marke, 'produkt:', produkt);
-    } catch(e) {
-      console.log('Photo upload trigger error:', e.message);
-    }
-
     // Fire-and-forget translations (separate function to avoid timeout)
     try {
       fetch('https://produktanlegen.netlify.app/.netlify/functions/translate-metaobjects', {
