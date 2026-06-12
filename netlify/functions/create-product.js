@@ -65,7 +65,7 @@ exports.handler = async function(event, context) {
     const exactMatch = allBrands.find(b => b.displayName.toLowerCase() === marke.toLowerCase());
     const partialMatch = allBrands.find(b => b.displayName.toLowerCase().includes(marke.toLowerCase()) || marke.toLowerCase().includes(b.displayName.toLowerCase()));
     introBrandId = exactMatch?.id || partialMatch?.id || null;
-    console.log('Brand:', exactMatch?.displayName || partialMatch?.displayName || 'none');
+    console.log('googleToken present:', !!googleToken, 'length:', googleToken?.length);
 
     // --- CREATE METAOBJECTS ---
     const detailsResult = await gql(`
