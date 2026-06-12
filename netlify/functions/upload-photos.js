@@ -41,6 +41,8 @@ exports.handler = async function(event, context) {
         if (productFolders.length === 0) { console.log('No product folder:', produkt); return []; }
 
         const colorNorm = farbe.toLowerCase().replace(/\s+/g, '-');
+        const colorNormSpace = farbe.toLowerCase().replace(/-+/g, ' ');
+
         for (const folder of productFolders) {
           // First check for direct image files matching color
           const filesSearch = await fetch(
@@ -48,11 +50,21 @@ exports.handler = async function(event, context) {
             { headers: { 'Authorization': 'Bearer ' + googleToken } }
           ).then(r => r.json());
           const allFiles = filesSearch.files || [];
-          const colorFiles = allFiles.filter(f =>
-            f.name.toLowerCase().includes(colorNorm) ||
-            f.name.toLowerCase().includes(farbe.toLowerCase())
-          );
+
+          // Normalize filename for comparison (replace hyphens and spaces)
+          const colorFiles = allFiles.filter(f => {
+            const fn = f.name.toLowerCase().replace(/-+/g, ' ');
+            return fn.includes(colorNormSpace) || fn.includes(colorNorm) ||
+              f.name.toLowerCase().includes(colorNorm) ||
+              f.name.toLowerCase().includes(farbe.toLowerCase());
+          });
           if (colorFiles.length > 0) return colorFiles;
+
+          // If folder name contains the color, take all files
+          const folderNameNorm = folder.name.toLowerCase().replace(/-+/g, ' ');
+          if (folderNameNorm.includes(colorNormSpace) || folderNameNorm.includes(farbe.toLowerCase())) {
+            if (allFiles.length > 0) return allFiles;
+          }
 
           // Check for color subfolders
           const subfoldersSearch = await fetch(
