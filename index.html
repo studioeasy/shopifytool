@@ -426,6 +426,7 @@ function selectProduct(rowIndex) {
 async function generateTexts() {
   const { marke, produkt, farbe, beschreibung } = currentProduct;
   try {
+    // Step 1: Get short texts first (fast)
     const resp = await fetch('/.netlify/functions/generate-texts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -436,21 +437,36 @@ async function generateTexts() {
     const parsed = JSON.parse(raw.replace(/```json\n?|```/g,'').trim());
     document.getElementById('text-details').textContent = parsed.details_pflege || '';
     document.getElementById('text-groesse').textContent = parsed.groesse_passform || '';
-    document.getElementById('text-seo').textContent = parsed.seo_text || '';
+    document.getElementById('text-seo').textContent = 'SEO-Text wird generiert...';
     document.getElementById('seo-title').value = parsed.seo_title || '';
     document.getElementById('meta-desc').value = parsed.meta_description || '';
     updateCount('seo-title','seo-title-count',70);
     updateCount('meta-desc','meta-desc-count',155);
-    // Store EN texts for later use
-    currentProduct.seoTextEn = parsed.seo_text_en || '';
-    currentProduct.metaDescEn = parsed.meta_description_en || '';
-    // Auto-select filter category
+    currentProduct.seoTextEn = '';
+    currentProduct.metaDescEn = '';
     if (parsed.filter_kategorie) {
       const sel = document.getElementById('filter-kategorie');
       for (let i = 0; i < sel.options.length; i++) {
         if (sel.options[i].value === parsed.filter_kategorie) { sel.selectedIndex = i; break; }
       }
     }
+
+    // Step 2: Get SEO text separately (slow, non-blocking)
+    fetch('/.netlify/functions/generate-seo-text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ marke, produkt, farbe, beschreibung })
+    }).then(r => r.json()).then(seoData => {
+      const seoRaw = seoData.content?.find(b => b.type === 'text')?.text || '';
+      const seoParsed = JSON.parse(seoRaw.replace(/```json\n?|```/g,'').trim());
+      if (seoParsed.seo_text) {
+        document.getElementById('text-seo').textContent = seoParsed.seo_text;
+      }
+    }).catch(e => {
+      document.getElementById('text-seo').textContent = 'SEO-Text Fehler – bitte manuell eingeben.';
+      console.log('SEO text error:', e.message);
+    });
+
   } catch(e) {
     setStatus('status-step2', 'Fehler beim Generieren: ' + e.message, 'error');
     ['details','groesse','seo'].forEach(k => { document.getElementById('text-'+k).textContent = 'Fehler – bitte nochmal versuchen.'; });
