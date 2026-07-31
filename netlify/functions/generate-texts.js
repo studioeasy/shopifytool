@@ -12,66 +12,30 @@ exports.handler = async function(event, context) {
     const apiKey = process.env.ANTHROPIC_API_KEY;
     if (!apiKey) return { statusCode: 500, headers, body: JSON.stringify({ error: 'API key missing' }) };
 
-    const prompt = `Du bist SEO-Texter fuer den deutschen Online-Shop Studio Easy (studioeasy.de). Kuratierte Mode, Accessoires und Lifestyle-Produkte.
+    const prompt = `SEO-Texter für Studio Easy (studioeasy.de). Kuratierte Mode, Accessoires, Lifestyle.
 
-ZEICHENREGELN:
-- Ersetze ß durch ss (Strasse, weiss, Groesse)
-- Umlaute ä, ö, ü BLEIBEN als ä, ö, ü - NIEMALS ae, oe, ue schreiben!
-- Keine Anführungszeichen innerhalb der Textwerte!
-- Ton: Klar, modern, direkt. Du-Ansprache.
+Regeln: ß→ss, Umlaute ä/ö/ü behalten, keine Anführungszeichen in Textwerten.
+Ton: Klar, modern, Du-Ansprache.
 
-Produkt: ${produkt} von ${marke}
-Farbe: ${farbe || 'nicht angegeben'}
-Beschreibung (englisch): ${beschreibung || 'nicht angegeben'}
+Produkt: ${produkt} von ${marke}, Farbe: ${farbe || '-'}
+Beschreibung: ${beschreibung || '-'}
 
-=== FELD 1: details_pflege (PLAINTEXT, KEIN HTML) ===
-Format wie dieses Beispiel:
-Die Raffia Bucket Bag von Zulu und Zephyr - eine handgeflochtene Tasche mit breitem Trageriemen. Grosszügig bemessen für alle Essentials.
-Details:
-- 100 % natürliches Raffia, handgeflochten
-- Innentasche mit Logo-Patch
-Pflegehinweis:
-- Mit feuchtem Tuch reinigen
-- Flach trocknen
+FELDER:
+1. details_pflege: Plaintext. 2-3 Einleitungssätze + Details: (Stichpunkte) + Pflegehinweis: (Stichpunkte)
+2. groesse_passform: Plaintext. Kurz, Masse/Fit-Empfehlung.
+3. seo_title: MAX 56 Zeichen
+4. meta_description: MAX 155 Zeichen
+5. filter_kategorie: Bottoms/Knitwear/Tops/Dresses/Outerwear/Sets/Swimwear/Sandalen/Ballerinas/Slip-Ins/Sneaker/Stiefel/Hair Clips/Schmuck/Sonnenbrillen/Taschen/Bags/Caps/Gürtel/Halstücher/Schals/Bücher/Home Goods/Kerzen/Schreibwaren/Accessoires
 
-=== FELD 2: groesse_passform (PLAINTEXT, KEIN HTML) ===
-Kurz und präzise. Masse falls bekannt. Fit-Empfehlung.
-
-=== FELD 3: seo_text (NUR HTML, MIN. 350 WÖRTER) ===
-Exakte Struktur:
-<h1>[Marke] [Produkt] [Farbe] – [Keyword]</h1>
-<h2>[Produkt] [Farbe] – [keyword-reicher Untertitel]</h2>
-<p>[Absatz 1: 4-5 Sätze, Marke + Produkt + Farbe + Besonderheit + warum es toll ist]</p>
-<p>[Absatz 2: 4-5 Sätze, Material + Verarbeitung + Nachhaltigkeit + Styling-Kontext, Marke nochmal erwähnen]</p>
-<h2>Details</h2>
-<ul><li>Marke: ${marke}</li><li>Modell: ${produkt}</li><li>Farbe: ${farbe}</li><li>[weitere Details, min. 5 Punkte]</li></ul>
-<h2>Grösse & Passform</h2>
-<ul><li>[min. 3 Passform-Infos]</li></ul>
-<h2>Material & Qualität</h2>
-<ul><li>[min. 3 Punkte: Material, Verarbeitung, Nachhaltigkeit]</li></ul>
-<h2>Styling & Anlässe</h2>
-<p>[3-4 Sätze natürlicher Text mit konkreten Outfit-Kombis und Anlässen. KEINE Liste!]</p>
-
-=== FELDER 4-6 ===
-- seo_title: MAXIMAL 56 Zeichen (ohne | Studio Easy)
-- meta_description: MAXIMAL 155 Zeichen
-- filter_kategorie: aus Liste unten
-
-Filterkategorien:
-Kleidung: Bottoms, Knitwear, Tops, Dresses, Outerwear, Sets, Swimwear
-Schuhe: Sandalen, Ballerinas, Slip-Ins, Sneaker, Stiefel
-Accessoires: Hair Clips, Schmuck, Sonnenbrillen, Taschen, Accessoires, Bags, Caps, Gürtel, Halstücher, Schals
-Lifestyle: Bücher, Gutschein, Home Goods, Kaffee, Kerzen, Spiele, Schreibwaren, Feuerzeuge
-
-Erstelle nur die 6 deutschen Texte. Antworte NUR mit JSON.`;
+JSON mit 5 Feldern, keine anderen Felder.`;
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
-        max_tokens: 4000,
-        system: 'Du antwortest AUSSCHLIESSLICH mit validem JSON ohne Backticks. JSON mit 6 Feldern: details_pflege, groesse_passform, seo_text, seo_title, meta_description, filter_kategorie. KRITISCH: seo_title max 56 Zeichen, meta_description max 155 Zeichen. Umlaute ä ö ü IMMER behalten!',
+        max_tokens: 1200,
+        system: 'Antworte NUR mit validem JSON ohne Backticks. 5 Felder: details_pflege, groesse_passform, seo_title (max 56 Zeichen!), meta_description (max 155 Zeichen!), filter_kategorie. Umlaute ä ö ü IMMER behalten!',
         messages: [{ role: 'user', content: prompt }]
       })
     });
@@ -103,15 +67,15 @@ Erstelle nur die 6 deutschen Texte. Antworte NUR mit JSON.`;
 
     if (!parsed) return { statusCode: 500, headers, body: JSON.stringify({ error: 'No result' }) };
 
-    // Add | Studio Easy to title
     if (parsed.seo_title) {
       parsed.seo_title = parsed.seo_title.replace(/\s*\|\s*Studio Easy\s*$/i, '').trim();
       const withSuffix = parsed.seo_title + ' | Studio Easy';
       parsed.seo_title = withSuffix.length <= 70 ? withSuffix : parsed.seo_title.substring(0, 56).trim() + ' | Studio Easy';
     }
-
     if (parsed.meta_description?.length > 155) parsed.meta_description = parsed.meta_description.substring(0, 152) + '...';
-    if (parsed.meta_description_en?.length > 155) parsed.meta_description_en = parsed.meta_description_en.substring(0, 152) + '...';
+
+    // seo_text als Platzhalter – wird separat via generate-seo-text generiert
+    parsed.seo_text = '';
 
     data.content[0].text = JSON.stringify(parsed);
     return { statusCode: 200, headers, body: JSON.stringify(data) };
