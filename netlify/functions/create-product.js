@@ -10,7 +10,8 @@ exports.handler = async function(event, context) {
 
     const { shopifyToken, googleToken, title, bodyHtml, vendor, price, ek, sku, barcode,
             farbe, marke, produkt, filterKategorie, detailsText, groesseText,
-            seoTitle, seoMeta, seoTextEn, metaDescEn, groessen } = JSON.parse(event.body);
+            seoTitle, seoMeta, seoTextEn, metaDescEn, groessen,
+            gewicht, hsCode, countryOrigin } = JSON.parse(event.body);
 
     const STORE = 'pevzde-fd.myshopify.com';
     const GRAPHQL_URL = 'https://' + STORE + '/admin/api/2026-01/graphql.json';
@@ -50,6 +51,31 @@ exports.handler = async function(event, context) {
         if (cl.includes(key)) return val;
       }
       return 'BLACK';
+    }
+
+    // Map country names to ISO codes
+    function mapCountry(c) {
+      if (!c) return null;
+      const cl = c.trim().toUpperCase();
+      const map = {
+        'CN': 'CN', 'CHINA': 'CN', 'CHINA (VOLKSREPUBLIK)': 'CN',
+        'HK': 'HK', 'HONGKONG': 'HK', 'HONG KONG': 'HK',
+        'IN': 'IN', 'INDIEN': 'IN', 'INDIA': 'IN',
+        'PT': 'PT', 'PORTUGAL': 'PT',
+        'FR': 'FR', 'FRANKREICH': 'FR', 'FRANCE': 'FR',
+        'US': 'US', 'USA': 'US', 'AMERIKA': 'US', 'VEREINIGTE STAATEN': 'US', 'UNITED STATES': 'US',
+        'PE': 'PE', 'PERU': 'PE',
+        'JP': 'JP', 'JAPAN': 'JP',
+        'DE': 'DE', 'DEUTSCHLAND': 'DE', 'GERMANY': 'DE',
+        'IT': 'IT', 'ITALIEN': 'IT', 'ITALY': 'IT',
+        'ES': 'ES', 'SPANIEN': 'ES', 'SPAIN': 'ES',
+        'GB': 'GB', 'UK': 'GB', 'GROSSBRITANNIEN': 'GB', 'UNITED KINGDOM': 'GB',
+        'TR': 'TR', 'TÜRKEI': 'TR', 'TURKEY': 'TR',
+        'VN': 'VN', 'VIETNAM': 'VN',
+        'BD': 'BD', 'BANGLADESCH': 'BD', 'BANGLADESH': 'BD',
+        'MA': 'MA', 'MAROKKO': 'MA', 'MOROCCO': 'MA',
+      };
+      return map[cl] || (cl.length === 2 ? cl : null);
     }
 
     function makeHandle(str) {
@@ -94,6 +120,7 @@ exports.handler = async function(event, context) {
     const osRaw = groessen?.['OS'];
     const osQty = osRaw ? String(osRaw).replace(/[^\d,\.]/g, '').replace(',', '.') : null;
     console.log('Price:', cleanPrice, 'Sizes:', activeGroessen.length, 'OS qty:', osQty);
+    const cleanWeight = parseFloat((gewicht || '0.5').toString().replace(',', '.')) || 0.5;
 
     let variants = [];
     if (activeGroessen.length > 0) {
@@ -102,13 +129,13 @@ exports.handler = async function(event, context) {
         price: cleanPrice,
         taxable: true,
         barcode: finalBarcode,
-        weight: 0.5,
+        weight: cleanWeight,
         weight_unit: 'kg',
         inventory_management: 'shopify',
         sku: sku ? sku + '-' + size : undefined
       }));
     } else {
-      variants = [{ price: cleanPrice, taxable: true, barcode: finalBarcode, weight: 0.5, weight_unit: 'kg', sku: sku || undefined }];
+      variants = [{ price: cleanPrice, taxable: true, barcode: finalBarcode, weight: cleanWeight, weight_unit: 'kg', sku: sku || undefined }];
     }
 
     const metafields = [
@@ -167,12 +194,18 @@ exports.handler = async function(event, context) {
       await gql(`mutation PublishProduct($id: ID!, $input: [PublicationInput!]!) { publishablePublish(id: $id, input: $input) { publishable { availablePublicationsCount { count } } userErrors { field message } } }`, { id: productGid, input: [{ publicationId: channel.id }] });
     }
 
-    // --- EK AS COST (first variant only) ---
-    if (ek && productData.product.variants?.[0]?.inventory_item_id) {
-      await fetch('https://' + STORE + '/admin/api/2026-01/inventory_items/' + productData.product.variants[0].inventory_item_id + '.json', {
+    // --- EK AS COST + HS CODE + COUNTRY ORIGIN ---
+    if (productData.product.variants?.[0]?.inventory_item_id) {
+      const inventoryItemId = productData.product.variants[0].inventory_item_id;
+      const inventoryUpdate = { id: inventoryItemId };
+      if (ek) inventoryUpdate.cost = ek;
+      if (hsCode) inventoryUpdate.harmonized_system_code = hsCode;
+      const mappedCountry = mapCountry(countryOrigin);
+      if (mappedCountry) inventoryUpdate.country_code_of_origin = mappedCountry;
+      await fetch('https://' + STORE + '/admin/api/2026-01/inventory_items/' + inventoryItemId + '.json', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': shopifyToken },
-        body: JSON.stringify({ inventory_item: { id: productData.product.variants[0].inventory_item_id, cost: ek } })
+        body: JSON.stringify({ inventory_item: inventoryUpdate })
       });
     }
 
