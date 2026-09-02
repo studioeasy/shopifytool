@@ -372,6 +372,9 @@ function selectProduct(rowIndex) {
     vk: header.indexOf('VK'),
     sku: header.indexOf('SKU'),
     barcode: header.indexOf('Barcode'),
+    gewicht: header.indexOf('Gewicht'),
+    hsCode: header.indexOf('HS Code'),
+    countryOrigin: header.indexOf('Country Origin'),
     shopifyId: header.indexOf('Shopify ID')
   };
   // Map size columns
@@ -400,6 +403,9 @@ function selectProduct(rowIndex) {
     vk: (row[ci.vk]||'').replace(/[^\d,\.]/g,'').replace(',','.'),
     sku: row[ci.sku]||'',
     barcode: row[ci.barcode]||'',
+    gewicht: (row[ci.gewicht]||'').replace(/[^\d,\.]/g,'').replace(',','.') || '0.5',
+    hsCode: row[ci.hsCode]||'',
+    countryOrigin: row[ci.countryOrigin]||'',
     groessen,
     shopifyIdColIndex: ci.shopifyId
   };
@@ -502,6 +508,9 @@ async function createShopifyProduct() {
         marke,
         produkt: currentProduct.produkt,
         groessen: currentProduct.groessen || {},
+        gewicht: currentProduct.gewicht || '0.5',
+        hsCode: currentProduct.hsCode || '',
+        countryOrigin: currentProduct.countryOrigin || '',
         filterKategorie: document.getElementById('filter-kategorie').value,
         detailsText: getTextValue('details'),
         groesseText: getTextValue('groesse'),
