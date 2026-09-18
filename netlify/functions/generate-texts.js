@@ -16,6 +16,7 @@ exports.handler = async function(event, context) {
 
 Regeln: ß→ss, Umlaute ä/ö/ü behalten, keine Anführungszeichen in Textwerten.
 Ton: Klar, modern, Du-Ansprache.
+WICHTIG für details_pflege: Variiere den Einstiegssatz – wechsle zwischen verschiedenen Perspektiven und Formulierungen. Nie zweimal denselben Anfang.
 
 Produkt: ${produkt} von ${marke}, Farbe: ${farbe || '-'}
 Beschreibung: ${beschreibung || '-'}
